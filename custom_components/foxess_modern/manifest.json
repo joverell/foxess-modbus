@@ -5,9 +5,9 @@
   "config_flow": true,
   "dependencies": ["modbus"],
   "documentation": "https://github.com/joverell/foxess-modbus",
-  "issue_tracker": "https://github.com/joverell/foxess-modbus/issues",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "version": "0.1.0",
-  "requirements": ["modbus-connection[tmodbus]>=4.12.1"]
+  "issue_tracker": "https://github.com/joverell/foxess-modbus/issues",
+  "requirements": ["modbus-connection[tmodbus]>=4.12.1"],
+  "version": "0.1.0"
 }
