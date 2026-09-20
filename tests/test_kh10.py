@@ -15,7 +15,7 @@ def kh10_unit():
 
     # Populate realistic holding registers for KH10
     unit.holding.update({
-        # PV registers
+        # PV registers (4 MPPT trackers)
         39070: 3805,  # PV1 Voltage: 380.5 V
         39071: 812,   # PV1 Current: 8.12 A
         39279: 0,     # PV1 Power high word
@@ -24,6 +24,14 @@ def kh10_unit():
         39073: 750,   # PV2 Current: 7.50 A
         39281: 0,     # PV2 Power high word
         39282: 2814,  # PV2 Power low word -> 2814 W
+        39074: 3600,  # PV3 Voltage: 360.0 V
+        39075: 650,   # PV3 Current: 6.50 A
+        39283: 0,     # PV3 Power high word
+        39284: 2340,  # PV3 Power low word -> 2340 W
+        39076: 3550,  # PV4 Voltage: 355.0 V
+        39077: 600,   # PV4 Current: 6.00 A
+        39285: 0,     # PV4 Power high word
+        39286: 2130,  # PV4 Power low word -> 2130 W
 
         # Grid registers
         31006: 2425,  # Grid Voltage: 242.5 V
@@ -77,14 +85,20 @@ async def test_kh10_readings(kh10_unit):
     assert "inverter" in report.updated
     assert not report.failed
 
-    # PV checks
+    # PV checks (all 4 strings)
     assert inverter.pv.pv1_voltage == pytest.approx(380.5)
     assert inverter.pv.pv1_current == pytest.approx(8.12)
     assert inverter.pv.pv1_power == 3089
     assert inverter.pv.pv2_voltage == pytest.approx(375.2)
     assert inverter.pv.pv2_current == pytest.approx(7.50)
     assert inverter.pv.pv2_power == 2814
-    assert inverter.pv.pv_power_total == pytest.approx(5903.0)
+    assert inverter.pv.pv3_voltage == pytest.approx(360.0)
+    assert inverter.pv.pv3_current == pytest.approx(6.50)
+    assert inverter.pv.pv3_power == 2340
+    assert inverter.pv.pv4_voltage == pytest.approx(355.0)
+    assert inverter.pv.pv4_current == pytest.approx(6.00)
+    assert inverter.pv.pv4_power == 2130
+    assert inverter.pv.pv_power_total == pytest.approx(10373.0)
 
     # Battery checks
     assert inverter.battery.voltage == pytest.approx(345.0)

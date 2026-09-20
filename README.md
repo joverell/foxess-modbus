@@ -23,7 +23,7 @@ Built specifically against [`modbus-connection`](https://home-assistant-libs.git
 
 | Series | Models | Interface | Modbus Type | Register Set |
 | :--- | :--- | :--- | :--- | :--- |
-| **KH Series** | KH7, KH8, KH9, KH10, KH10.5 | AUX (RS-485) | Modbus TCP / RTU | Holding Registers (1.33+) |
+| **KH Series** | KH7, KH8, KH9, KH10, KH10.5 (4 MPPTs) | AUX (RS-485) | Modbus TCP / RTU | Holding Registers (1.33+) |
 
 *Community contributions for H1, H3, AIO, and EVO series are welcome!*
 
@@ -69,6 +69,8 @@ async def main():
         print(f"PV Total Power:    {inverter.pv.pv_power_total} W")
         print(f"PV1:               {inverter.pv.pv1_voltage} V, {inverter.pv.pv1_power} W")
         print(f"PV2:               {inverter.pv.pv2_voltage} V, {inverter.pv.pv2_power} W")
+        print(f"PV3:               {inverter.pv.pv3_voltage} V, {inverter.pv.pv3_power} W")
+        print(f"PV4:               {inverter.pv.pv4_voltage} V, {inverter.pv.pv4_power} W")
         print(f"Battery SoC:       {inverter.battery.soc} %")
         print(f"Battery Power:     {inverter.battery.power} W")
         print(f"Battery Voltage:   {inverter.battery.voltage} V")
@@ -99,6 +101,12 @@ if __name__ == "__main__":
 | | `39072` | 16-bit uint | 0.1 | V | PV2 Voltage |
 | | `39073` | 16-bit uint | 0.01 | A | PV2 Current |
 | | `39281-39282` | 32-bit uint | 1.0 | W | PV2 Power |
+| | `39074` | 16-bit uint | 0.1 | V | PV3 Voltage |
+| | `39075` | 16-bit uint | 0.01 | A | PV3 Current |
+| | `39283-39284` | 32-bit uint | 1.0 | W | PV3 Power |
+| | `39076` | 16-bit uint | 0.1 | V | PV4 Voltage |
+| | `39077` | 16-bit uint | 0.01 | A | PV4 Current |
+| | `39285-39286` | 32-bit uint | 1.0 | W | PV4 Power |
 | **Grid** | `31006` | 16-bit uint | 0.1 | V | Grid Voltage |
 | | `31007` | 16-bit uint | 0.1 | A | Inverter Current |
 | | `31008` | 16-bit int | 1.0 | W | Inverter Power |
