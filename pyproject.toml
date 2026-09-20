@@ -20,12 +20,16 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/home-assistant-libs/modbus-connection"
+Homepage = "https://github.com/joverell/foxess-modbus"
+Repository = "https://github.com/joverell/foxess-modbus"
+"Bug Tracker" = "https://github.com/joverell/foxess-modbus/issues"
 
 [dependency-groups]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.11",
 ]
 
 [tool.hatch.build.targets.wheel]
