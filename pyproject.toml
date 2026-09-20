@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "foxess-modbus"
+version = "0.1.0"
+description = "Modern, standalone Python library for FoxESS inverters using modbus-connection."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Home Assistant Community" }]
+keywords = ["modbus", "foxess", "inverter", "solar", "home-assistant"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Home Automation",
+]
+dependencies = [
+    "modbus-connection[tmodbus]>=4.12.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/home-assistant-libs/modbus-connection"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/foxess_modbus"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
