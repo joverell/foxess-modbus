@@ -1,7 +1,13 @@
-# foxess-modbus
+<p align="center">
+  <img src="icon.png" width="120" height="120" alt="FoxESS Modbus Logo" style="border-radius: 26px;">
+</p>
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![HACS: Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/default)
+<h1 align="center">foxess-modbus</h1>
+
+<p align="center">
+  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0"></a>
+  <a href="https://github.com/hacs/default"><img src="https://img.shields.io/badge/HACS-Custom-orange.svg" alt="HACS: Custom"></a>
+</p>
 
 A modern, standalone Python device library and Home Assistant custom integration for communicating with **FoxESS hybrid solar inverters** over Modbus.
 
