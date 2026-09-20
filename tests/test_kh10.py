@@ -160,3 +160,18 @@ async def test_kh10_control_commands(kh10_unit):
     await inverter.async_clear_overrides()
     assert kh10_unit.holding[44000] == 0
     assert kh10_unit.holding[41000] == 0  # Reverted to Self Use
+
+
+@pytest.mark.asyncio
+async def test_kh10_read_raw(kh10_unit):
+    """Test reading undecoded raw registers for diagnostics."""
+    inverter = FoxessKH10Inverter(kh10_unit)
+    raw = await inverter.async_read_raw()
+
+    assert "holding" in raw
+    holding = raw["holding"]
+    # Verify holding register addresses are present
+    assert 39070 in holding  # PV1 voltage
+    assert holding[39070] == 3805
+    assert 31024 in holding  # Battery SOC
+    assert holding[31024] == 85

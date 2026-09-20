@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from modbus_connection.model import Device, UpdateReport
+from modbus_connection.model import Device, Raw, UpdateReport
 
 from ..const import WorkMode
 from .battery import FoxessKH10Battery
@@ -64,6 +65,11 @@ class FoxessKH10Inverter(Device):
         """Refresh all readings and settings in a single poll."""
         await self.async_ensure_setup()
         return await self.async_poll([*self._readings, *self._settings])
+
+    async def async_read_raw(self, names: Iterable[str] | None = None) -> Raw:
+        """Read sub-system registers undecoded for diagnostics."""
+        target = [*self._readings, *self._settings] if names is None else names
+        return await super().async_read_raw(target)
 
     async def async_set_work_mode(self, mode: WorkMode | int) -> None:
         """Set the inverter work mode (Self Use, Feed-in First, Back-up)."""
