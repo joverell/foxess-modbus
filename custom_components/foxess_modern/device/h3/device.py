@@ -1,4 +1,4 @@
-"""FoxESS KH10 Inverter Device."""
+"""FoxESS H3 Inverter Device."""
 
 from __future__ import annotations
 
@@ -8,18 +8,18 @@ from typing import TYPE_CHECKING
 from modbus_connection.model import Device, Raw, UpdateReport
 
 from ..const import WorkMode
-from .battery import FoxessKH10Battery
-from .control import FoxessKH10Control
-from .grid import FoxessKH10Grid
-from .inverter import FoxessKH10InverterState
-from .pv import FoxessKH10PV
+from .battery import FoxessH3Battery
+from .control import FoxessH3Control
+from .grid import FoxessH3Grid
+from .inverter import FoxessH3InverterState
+from .pv import FoxessH3PV
 
 if TYPE_CHECKING:
     from modbus_connection import ModbusUnit
 
 
-class FoxessKH10Inverter(Device):
-    """FoxESS KH10 Hybrid Inverter reached through a ModbusUnit.
+class FoxessH3Inverter(Device):
+    """FoxESS H3 / AC3 Three-Phase Hybrid Inverter reached through a ModbusUnit.
 
     Provides high-level async methods for telemetry polling and inverter control.
     """
@@ -29,7 +29,7 @@ class FoxessKH10Inverter(Device):
         unit: ModbusUnit,
         *,
         serial_number: str | None = None,
-        model: str = "KH10",
+        model: str = "H3",
     ) -> None:
         """Initialize inverter components."""
         super().__init__(unit)
@@ -37,18 +37,17 @@ class FoxessKH10Inverter(Device):
         self.model = model
 
         # Sub-system components
-        self.pv = FoxessKH10PV(unit)
-        self.battery = FoxessKH10Battery(unit)
-        self.grid = FoxessKH10Grid(unit)
-        self.inverter = FoxessKH10InverterState(unit)
-        self.control = FoxessKH10Control(unit)
+        self.pv = FoxessH3PV(unit)
+        self.battery = FoxessH3Battery(unit)
+        self.grid = FoxessH3Grid(unit)
+        self.inverter = FoxessH3InverterState(unit)
+        self.control = FoxessH3Control(unit)
 
         self._readings: tuple[str, ...] = ("pv", "battery", "grid", "inverter")
         self._settings: tuple[str, ...] = ("control",)
 
     async def _async_setup(self) -> None:
         """Perform initial setup or validation if needed."""
-        # Setup can be extended if dynamic model identification is desired.
         pass
 
     async def async_update_readings(self) -> UpdateReport:
@@ -92,7 +91,6 @@ class FoxessKH10Inverter(Device):
         power_w = abs(power_w)
         await self.control.write("max_soc", max_soc)
         await self.control.write("remote_timeout", timeout_sec)
-        # Negative active power commands grid import into the battery
         await self.control.write("remote_active_power", -power_w)
         await self.control.write("remote_enable", 1)
 
@@ -106,7 +104,6 @@ class FoxessKH10Inverter(Device):
         power_w = abs(power_w)
         await self.control.write("min_soc", min_soc)
         await self.control.write("remote_timeout", timeout_sec)
-        # Positive active power commands battery discharge to grid
         await self.control.write("remote_active_power", power_w)
         await self.control.write("remote_enable", 1)
 

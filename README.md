@@ -2,8 +2,10 @@
 
 [![PyPI](https://img.shields.io/pypi/v/foxess-modbus.svg)](https://pypi.org/project/foxess-modbus/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=joverell&repository=foxess-modbus&category=integration)
+[![Add Integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start?domain=foxess_modern)
 
-A modern, standalone Python device library for communicating with **FoxESS hybrid solar inverters** over Modbus.
+A modern, standalone Python device library and Home Assistant custom integration for communicating with **FoxESS hybrid solar inverters** over Modbus.
 
 Built specifically against [`modbus-connection`](https://home-assistant-libs.github.io/modbus-connection/), following the architectural pattern introduced in [Modernizing Modbus in Home Assistant](https://developers.home-assistant.io/blog/2026/07/05/modernizing-modbus/) (Home Assistant Core 2026.7+).
 
@@ -23,13 +25,32 @@ Built specifically against [`modbus-connection`](https://home-assistant-libs.git
 
 | Series | Models | Interface | Modbus Type | Register Set |
 | :--- | :--- | :--- | :--- | :--- |
-| **KH Series** | KH7, KH8, KH9, KH10, KH10.5 (4 MPPTs) | AUX (RS-485) | Modbus TCP / RTU | Holding Registers (1.33+) |
-
-*Community contributions for H1, H3, AIO, and EVO series are welcome!*
+| **KH Series** | KH7, KH8, KH9, KH10, KH10.5 (up to 4 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers (1.33+) |
+| **H1 / AC1 Series** | H1-3.0 to H1-6.0, AC1, AIO-H1 (2 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers |
+| **H3 / AC3 Series** | H3-5.0 to H3-12.0, AC3, AIO-H3, H3-Pro | AUX / LAN | Modbus TCP / RTU | Holding Registers (Three-Phase) |
 
 ---
 
-## Installation
+## Home Assistant Installation
+
+### Option 1: 1-Click via HACS
+
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=joverell&repository=foxess-modbus&category=integration)
+
+1. Click the **Open in HACS** badge above.
+2. In the modal dialog, click **Add**.
+3. Download the integration and restart Home Assistant.
+4. Click the button below to add your inverter:
+
+[![Add Integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start?domain=foxess_modern)
+
+### Option 2: Manual Installation
+
+Copy `custom_components/foxess_modern` into your Home Assistant `<config>/custom_components/` directory and restart.
+
+---
+
+## Python Library Installation
 
 ```bash
 pip install "foxess-modbus"

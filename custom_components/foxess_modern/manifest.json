@@ -1,10 +1,11 @@
 {
   "domain": "foxess_modern",
   "name": "FoxESS Modern (modbus-connection)",
-  "codeowners": ["@home-assistant-community"],
+  "codeowners": ["@joverell"],
   "config_flow": true,
   "dependencies": ["modbus"],
-  "documentation": "https://developers.home-assistant.io/blog/2026/07/05/modernizing-modbus/",
+  "documentation": "https://github.com/joverell/foxess-modbus",
+  "issue_tracker": "https://github.com/joverell/foxess-modbus/issues",
   "integration_type": "device",
   "iot_class": "local_polling",
   "version": "0.1.0",
