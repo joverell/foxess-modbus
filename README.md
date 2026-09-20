@@ -134,15 +134,7 @@ if __name__ == "__main__":
 
 ## Contributing
 
-1. Fork this repository.
-2. Install in editable mode with development dependencies:
-   ```bash
-   pip install -e ".[dev]"
-   ```
-3. Run tests before submitting a PR:
-   ```bash
-   pytest
-   ```
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for development setup instructions, guidelines for adding new FoxESS inverter models, and testing procedures.
 
 ## License
 
