@@ -5,13 +5,22 @@
 <h1 align="center">foxess-modbus</h1>
 
 <p align="center">
-  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0"></a>
+  <a href="https://github.com/joverell/foxess-modbus/releases/latest"><img src="https://img.shields.io/github/v/release/joverell/foxess-modbus" alt="GitHub Release"></a>
+  <a href="https://github.com/joverell/foxess-modbus/blob/main/LICENSE"><img src="https://img.shields.io/github/license/joverell/foxess-modbus" alt="GitHub License"></a>
   <a href="https://github.com/hacs/default"><img src="https://img.shields.io/badge/HACS-Custom-orange.svg" alt="HACS: Custom"></a>
+  <a href="https://github.com/joverell/foxess-modbus/actions/workflows/hassfest.yaml"><img src="https://github.com/joverell/foxess-modbus/actions/workflows/hassfest.yaml/badge.svg" alt="Hassfest"></a>
+  <a href="https://github.com/joverell/foxess-modbus/actions/workflows/hacs.yaml"><img src="https://github.com/joverell/foxess-modbus/actions/workflows/hacs.yaml/badge.svg" alt="Validate HACS"></a>
+  <a href="https://github.com/joverell/foxess-modbus/actions/workflows/pytest.yaml"><img src="https://github.com/joverell/foxess-modbus/actions/workflows/pytest.yaml/badge.svg" alt="pytest"></a>
+  <a href="https://www.buymeacoffee.com/joverell"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-yellow?logo=buymeacoffee" alt="Buy Me A Coffee"></a>
 </p>
 
 A modern, standalone Python device library and Home Assistant custom integration for communicating with **FoxESS hybrid solar inverters** over Modbus.
 
 Built specifically against [`modbus-connection`](https://home-assistant-libs.github.io/modbus-connection/), following the architectural pattern introduced in [Modernizing Modbus in Home Assistant](https://developers.home-assistant.io/blog/2026/07/05/modernizing-modbus/) (Home Assistant Core 2026.7+).
+
+### Like this integration?
+
+<a href="https://www.buymeacoffee.com/joverell" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;"/></a>
 
 ---
 
