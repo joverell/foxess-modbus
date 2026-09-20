@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "FoxESS Inverter Setup",
+        "description": "Configure the Modbus connection details for your FoxESS inverter.",
+        "data": {
+          "host": "Host (IP or hostname of RS-485 Gateway)",
+          "port": "Port",
+          "unit_id": "Modbus Slave ID",
+          "model": "Inverter Model"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the inverter. Check IP, port, and unit ID.",
+      "unknown": "Unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This FoxESS inverter connection is already configured."
+    }
+  }
+}
