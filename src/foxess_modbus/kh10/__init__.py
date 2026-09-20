@@ -7,11 +7,15 @@ from .grid import FoxessKH10Grid
 from .inverter import FoxessKH10InverterState
 from .pv import FoxessKH10PV
 
+# Backwards compatibility alias
+FoxessKHInverter = FoxessKH10Inverter
+
 __all__ = [
     "FoxessKH10Battery",
     "FoxessKH10Control",
     "FoxessKH10Grid",
     "FoxessKH10Inverter",
+    "FoxessKHInverter",
     "FoxessKH10InverterState",
     "FoxessKH10PV",
 ]
