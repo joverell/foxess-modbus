@@ -23,7 +23,7 @@ from .const import (
     SETTINGS_SCAN_INTERVAL,
 )
 from .coordinator import FoxessDataUpdateCoordinator
-from .device.kh10.device import FoxessKH10Inverter
+from .device import create_inverter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         unit_id,
     )
 
-    device = FoxessKH10Inverter(unit, serial_number=serial)
+    device = create_inverter(unit, serial_number=serial, model=entry.data.get("model"))
 
     readings_coordinator = FoxessDataUpdateCoordinator(
         hass,

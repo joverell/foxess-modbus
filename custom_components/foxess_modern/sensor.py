@@ -34,8 +34,9 @@ class FoxessSensorDescription(SensorEntityDescription):
     value_fn: Callable[[Any], Any]
 
 
-SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
-    # PV sensors
+# Base sensors present across all supported FoxESS hybrid inverters
+BASE_SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
+    # PV common
     FoxessSensorDescription(
         key="pv_power_total",
         name="PV Power Total",
@@ -92,55 +93,7 @@ SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         value_fn=lambda dev: dev.pv.pv2_current,
     ),
-    FoxessSensorDescription(
-        key="pv3_power",
-        name="PV3 Power",
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfPower.WATT,
-        value_fn=lambda dev: dev.pv.pv3_power,
-    ),
-    FoxessSensorDescription(
-        key="pv3_voltage",
-        name="PV3 Voltage",
-        device_class=SensorDeviceClass.VOLTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-        value_fn=lambda dev: dev.pv.pv3_voltage,
-    ),
-    FoxessSensorDescription(
-        key="pv3_current",
-        name="PV3 Current",
-        device_class=SensorDeviceClass.CURRENT,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-        value_fn=lambda dev: dev.pv.pv3_current,
-    ),
-    FoxessSensorDescription(
-        key="pv4_power",
-        name="PV4 Power",
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfPower.WATT,
-        value_fn=lambda dev: dev.pv.pv4_power,
-    ),
-    FoxessSensorDescription(
-        key="pv4_voltage",
-        name="PV4 Voltage",
-        device_class=SensorDeviceClass.VOLTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-        value_fn=lambda dev: dev.pv.pv4_voltage,
-    ),
-    FoxessSensorDescription(
-        key="pv4_current",
-        name="PV4 Current",
-        device_class=SensorDeviceClass.CURRENT,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-        value_fn=lambda dev: dev.pv.pv4_current,
-    ),
-    # Battery sensors
+    # Battery common
     FoxessSensorDescription(
         key="battery_soc",
         name="Battery SoC",
@@ -156,6 +109,22 @@ SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.WATT,
         value_fn=lambda dev: dev.battery.power,
+    ),
+    FoxessSensorDescription(
+        key="battery_charge_power",
+        name="Battery Charge Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: dev.battery.charge_power,
+    ),
+    FoxessSensorDescription(
+        key="battery_discharge_power",
+        name="Battery Discharge Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: dev.battery.discharge_power,
     ),
     FoxessSensorDescription(
         key="battery_voltage",
@@ -181,15 +150,7 @@ SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         value_fn=lambda dev: dev.battery.temperature,
     ),
-    # Grid sensors
-    FoxessSensorDescription(
-        key="grid_voltage",
-        name="Grid Voltage",
-        device_class=SensorDeviceClass.VOLTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-        value_fn=lambda dev: dev.grid.voltage,
-    ),
+    # Grid frequency (common to single and 3-phase)
     FoxessSensorDescription(
         key="grid_frequency",
         name="Grid Frequency",
@@ -197,22 +158,6 @@ SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfFrequency.HERTZ,
         value_fn=lambda dev: dev.grid.frequency,
-    ),
-    FoxessSensorDescription(
-        key="house_load_power",
-        name="House Load Power",
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfPower.WATT,
-        value_fn=lambda dev: dev.grid.load_power,
-    ),
-    FoxessSensorDescription(
-        key="grid_ct_meter_power",
-        name="Grid CT Meter Power",
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfPower.WATT,
-        value_fn=lambda dev: dev.grid.ct_meter_power,
     ),
     # Inverter health
     FoxessSensorDescription(
@@ -231,19 +176,219 @@ SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
     ),
 )
 
+# Extended MPPT sensors (PV3 and PV4 on 4-string inverters like KH)
+PV3_PV4_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
+    FoxessSensorDescription(
+        key="pv3_power",
+        name="PV3 Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.pv, "pv3_power", None),
+    ),
+    FoxessSensorDescription(
+        key="pv3_voltage",
+        name="PV3 Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        value_fn=lambda dev: getattr(dev.pv, "pv3_voltage", None),
+    ),
+    FoxessSensorDescription(
+        key="pv3_current",
+        name="PV3 Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_fn=lambda dev: getattr(dev.pv, "pv3_current", None),
+    ),
+    FoxessSensorDescription(
+        key="pv4_power",
+        name="PV4 Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.pv, "pv4_power", None),
+    ),
+    FoxessSensorDescription(
+        key="pv4_voltage",
+        name="PV4 Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        value_fn=lambda dev: getattr(dev.pv, "pv4_voltage", None),
+    ),
+    FoxessSensorDescription(
+        key="pv4_current",
+        name="PV4 Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_fn=lambda dev: getattr(dev.pv, "pv4_current", None),
+    ),
+)
+
+# Single-phase grid sensors (KH, H1, AC1)
+SINGLE_PHASE_GRID_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
+    FoxessSensorDescription(
+        key="grid_voltage",
+        name="Grid Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        value_fn=lambda dev: getattr(dev.grid, "voltage", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_current",
+        name="Grid Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_fn=lambda dev: getattr(dev.grid, "current", None),
+    ),
+    FoxessSensorDescription(
+        key="house_load_power",
+        name="House Load Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "load_power", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_ct_meter_power",
+        name="Grid CT Meter Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "ct_meter_power", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_import_power",
+        name="Grid Import Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "grid_import_power", 0.0),
+    ),
+    FoxessSensorDescription(
+        key="grid_export_power",
+        name="Grid Export Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "grid_export_power", 0.0),
+    ),
+)
+
+# Three-phase grid sensors (H3, AC3)
+THREE_PHASE_GRID_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
+    FoxessSensorDescription(
+        key="grid_voltage_r",
+        name="Grid Voltage Phase R",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        value_fn=lambda dev: getattr(dev.grid, "voltage_r", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_current_r",
+        name="Grid Current Phase R",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_fn=lambda dev: getattr(dev.grid, "current_r", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_power_r",
+        name="Grid Power Phase R",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "power_r", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_voltage_s",
+        name="Grid Voltage Phase S",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        value_fn=lambda dev: getattr(dev.grid, "voltage_s", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_current_s",
+        name="Grid Current Phase S",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_fn=lambda dev: getattr(dev.grid, "current_s", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_power_s",
+        name="Grid Power Phase S",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "power_s", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_voltage_t",
+        name="Grid Voltage Phase T",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        value_fn=lambda dev: getattr(dev.grid, "voltage_t", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_current_t",
+        name="Grid Current Phase T",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_fn=lambda dev: getattr(dev.grid, "current_t", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_power_t",
+        name="Grid Power Phase T",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "power_t", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_power_total",
+        name="Grid Power Total",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "grid_power_total", None),
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: FoxessConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up FoxESS sensors from a config entry."""
+    """Set up FoxESS sensors from a config entry dynamically according to model capabilities."""
     coordinator = entry.runtime_data.readings_coordinator
     device = entry.runtime_data.device
 
+    descriptions: list[FoxessSensorDescription] = list(BASE_SENSOR_DESCRIPTIONS)
+
+    # 1. Check for 4-string MPPT support (e.g. KH series)
+    if hasattr(device.pv, "pv3_power"):
+        descriptions.extend(PV3_PV4_DESCRIPTIONS)
+
+    # 2. Check for three-phase vs single-phase grid metering
+    if hasattr(device.grid, "voltage_r"):
+        descriptions.extend(THREE_PHASE_GRID_DESCRIPTIONS)
+    elif hasattr(device.grid, "voltage"):
+        descriptions.extend(SINGLE_PHASE_GRID_DESCRIPTIONS)
+
     async_add_entities(
         FoxessSensorEntity(coordinator, description, device, str(entry.unique_id))
-        for description in SENSOR_DESCRIPTIONS
+        for description in descriptions
     )
 
 
