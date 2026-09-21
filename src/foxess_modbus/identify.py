@@ -19,19 +19,20 @@ _SERIAL_PREFIXES: tuple[tuple[str, str], ...] = (
     ("60AA", "H1"),
     ("60PB", "H3"),
     ("60PA", "H3"),
-    ("60TB", "H3"),  # H3-Pro
-    ("60TA", "H3"),
+    ("60TB", "H3_PRO"),  # H3-Pro (6 strings)
+    ("60TA", "H3_PRO"),
 )
 
 _MODEL_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^KH", re.IGNORECASE), "KH"),
     (re.compile(r"^(?:H1|AC1|AIO-H1|P1)", re.IGNORECASE), "H1"),
+    (re.compile(r"^(?:H3-PRO|H3_PRO)", re.IGNORECASE), "H3_PRO"),
     (re.compile(r"^(?:H3|AC3|AIO-H3|P3)", re.IGNORECASE), "H3"),
 )
 
 
 def identify_model(identifier: str) -> str:
-    """Identify inverter model family ('KH', 'H1', 'H3') from serial number or model name.
+    """Identify inverter model family ('KH', 'H1', 'H3', 'H3_PRO') from serial number or model name.
 
     Returns the identified family string, or 'KH' by default if unknown.
     """
@@ -60,6 +61,7 @@ def create_inverter(
     # Lazy imports to avoid circular dependencies
     from .h1 import FoxessH1Inverter
     from .h3 import FoxessH3Inverter
+    from .h3_pro import FoxessH3ProInverter
     from .kh10 import FoxessKH10Inverter
 
     target_id = model or serial_number or ""
@@ -67,6 +69,8 @@ def create_inverter(
 
     if family == "H1":
         return FoxessH1Inverter(unit, serial_number=serial_number, model=model or "H1")
+    if family == "H3_PRO":
+        return FoxessH3ProInverter(unit, serial_number=serial_number, model=model or "H3-Pro")
     if family == "H3":
         return FoxessH3Inverter(unit, serial_number=serial_number, model=model or "H3")
 

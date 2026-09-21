@@ -36,11 +36,12 @@ Built specifically against [`modbus-connection`](https://home-assistant-libs.git
 
 ## Supported Inverter Models
 
-| Series | Models | Interface | Modbus Type | Register Set |
-| :--- | :--- | :--- | :--- | :--- |
-| **KH Series** | KH7, KH8, KH9, KH10, KH10.5 (up to 4 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers (1.33+) |
-| **H1 / AC1 Series** | H1-3.0 to H1-6.0, AC1, AIO-H1 (2 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers |
-| **H3 / AC3 Series** | H3-5.0 to H3-12.0, AC3, AIO-H3, H3-Pro | AUX / LAN | Modbus TCP / RTU | Holding Registers (Three-Phase) |
+| Series | Models | Strings / Trackers | Interface | Modbus Type | Register Set |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **H3-Pro Series** | H3-Pro-15.0 to H3-Pro-30.0 | **6 Strings** (PV1–PV6 across 3 MPPTs) | RS485 / LAN | Modbus TCP / RTU | Holding Registers (Commercial) |
+| **KH Series** | KH7, KH8, KH9, KH10, KH10.5 | **4 Strings** (PV1–PV4 across 4 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers (1.33+) |
+| **H3 / AC3 Series** | H3-5.0 to H3-12.0, AC3, AIO-H3 | **2 Strings** (PV1–PV2 across 2 MPPTs) | RS485 / LAN | Modbus TCP / RTU | Holding Registers (Three-Phase) |
+| **H1 / AC1 Series** | H1-3.0 to H1-6.0, AC1, AIO-H1 | **2 Strings** (PV1–PV2 across 2 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers |
 
 ---
 

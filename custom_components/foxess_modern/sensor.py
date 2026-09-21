@@ -231,6 +231,60 @@ PV3_PV4_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
     ),
 )
 
+# Multi-string PV sensors (H3-Pro: 6 PV strings)
+PV5_PV6_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
+    # PV5
+    FoxessSensorDescription(
+        key="pv5_power",
+        name="PV5 Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.pv, "pv5_power", None),
+    ),
+    FoxessSensorDescription(
+        key="pv5_voltage",
+        name="PV5 Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        value_fn=lambda dev: getattr(dev.pv, "pv5_voltage", None),
+    ),
+    FoxessSensorDescription(
+        key="pv5_current",
+        name="PV5 Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_fn=lambda dev: getattr(dev.pv, "pv5_current", None),
+    ),
+    # PV6
+    FoxessSensorDescription(
+        key="pv6_power",
+        name="PV6 Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.pv, "pv6_power", None),
+    ),
+    FoxessSensorDescription(
+        key="pv6_voltage",
+        name="PV6 Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        value_fn=lambda dev: getattr(dev.pv, "pv6_voltage", None),
+    ),
+    FoxessSensorDescription(
+        key="pv6_current",
+        name="PV6 Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_fn=lambda dev: getattr(dev.pv, "pv6_current", None),
+    ),
+)
+
 # Single-phase grid sensors (KH, H1, AC1)
 SINGLE_PHASE_GRID_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
     FoxessSensorDescription(
@@ -417,6 +471,10 @@ async def async_setup_entry(
     # 1. Check for 4-string MPPT support (e.g. KH series)
     if hasattr(device.pv, "pv3_power"):
         descriptions.extend(PV3_PV4_DESCRIPTIONS)
+
+    # 2. Check for 6-string MPPT support (e.g. H3-Pro series)
+    if hasattr(device.pv, "pv5_power"):
+        descriptions.extend(PV5_PV6_DESCRIPTIONS)
 
     # 2. Check for three-phase vs single-phase grid metering
     if hasattr(device.grid, "voltage_r"):

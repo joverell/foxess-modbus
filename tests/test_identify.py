@@ -25,7 +25,10 @@ def test_identify_model_from_serial():
     # H3 / AC3 models
     assert identify_model("60PB10123456789") == "H3"
     assert identify_model("60PA80123456789") == "H3"
-    assert identify_model("60TB15123456789") == "H3"
+
+    # H3-Pro models
+    assert identify_model("60TB15123456789") == "H3_PRO"
+    assert identify_model("60TA15123456789") == "H3_PRO"
 
 
 def test_identify_model_from_name():
@@ -37,7 +40,8 @@ def test_identify_model_from_name():
     assert identify_model("AIO-H1-3.7") == "H1"
     assert identify_model("H3-10.0") == "H3"
     assert identify_model("AC3-8.0") == "H3"
-    assert identify_model("H3-Pro-20.0") == "H3"
+    assert identify_model("H3-Pro-20.0") == "H3_PRO"
+    assert identify_model("H3_PRO_15.0") == "H3_PRO"
 
 
 def test_create_inverter_factory():
@@ -58,5 +62,10 @@ def test_create_inverter_factory():
     assert isinstance(dev_h3, FoxessH3Inverter)
 
     # Explicit model override
-    dev_h3_override = create_inverter(unit, model="H3-12.0")
-    assert isinstance(dev_h3_override, FoxessH3Inverter)
+    from foxess_modbus import FoxessH3ProInverter
+    dev_h3_pro = create_inverter(unit, serial_number="60TB15123456789")
+    assert isinstance(dev_h3_pro, FoxessH3ProInverter)
+
+    dev_explicit = create_inverter(unit, model="H1-3.0")
+    assert isinstance(dev_explicit, FoxessH1Inverter)
+    assert dev_explicit.model == "H1-3.0"
