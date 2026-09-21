@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -15,11 +17,12 @@ from homeassistant.components.sensor import (
 from homeassistant.const import (
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
+    UnitOfEnergy,
     UnitOfFrequency,
     UnitOfPower,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -365,6 +368,40 @@ THREE_PHASE_GRID_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
 )
 
 
+ENERGY_SENSOR_DESCRIPTIONS: tuple[tuple[str, str, Callable[[Any], float | None]], ...] = (
+    (
+        "pv_energy_total",
+        "Solar Energy Total",
+        lambda dev: getattr(dev.pv, "pv_power_total", None),
+    ),
+    (
+        "grid_import_energy_total",
+        "Grid Import Energy Total",
+        lambda dev: getattr(dev.grid, "grid_import_power", None),
+    ),
+    (
+        "grid_export_energy_total",
+        "Grid Export Energy Total",
+        lambda dev: getattr(dev.grid, "grid_export_power", None),
+    ),
+    (
+        "battery_charge_energy_total",
+        "Battery Charge Energy Total",
+        lambda dev: getattr(dev.battery, "charge_power", None),
+    ),
+    (
+        "battery_discharge_energy_total",
+        "Battery Discharge Energy Total",
+        lambda dev: getattr(dev.battery, "discharge_power", None),
+    ),
+    (
+        "load_energy_total",
+        "Load Energy Total",
+        lambda dev: getattr(dev.grid, "load_power", None),
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: FoxessConfigEntry,
@@ -373,6 +410,7 @@ async def async_setup_entry(
     """Set up FoxESS sensors from a config entry dynamically according to model capabilities."""
     coordinator = entry.runtime_data.readings_coordinator
     device = entry.runtime_data.device
+    serial = str(entry.unique_id)
 
     descriptions: list[FoxessSensorDescription] = list(BASE_SENSOR_DESCRIPTIONS)
 
@@ -386,10 +424,25 @@ async def async_setup_entry(
     elif hasattr(device.grid, "voltage"):
         descriptions.extend(SINGLE_PHASE_GRID_DESCRIPTIONS)
 
-    async_add_entities(
-        FoxessSensorEntity(coordinator, description, device, str(entry.unique_id))
+    entities: list[SensorEntity] = [
+        FoxessSensorEntity(coordinator, description, device, serial)
         for description in descriptions
-    )
+    ]
+
+    # 3. Add cumulative Energy Dashboard sensors (kWh)
+    for key, name, power_fn in ENERGY_SENSOR_DESCRIPTIONS:
+        entities.append(
+            FoxessEnergySensor(
+                coordinator=coordinator,
+                key=key,
+                name=name,
+                power_fn=power_fn,
+                device=device,
+                serial=serial,
+            )
+        )
+
+    async_add_entities(entities)
 
 
 class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorEntity):
@@ -415,3 +468,64 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
     def native_value(self) -> Any:
         """Return the state of the sensor."""
         return self.entity_description.value_fn(self._device)
+
+
+class FoxessEnergySensor(CoordinatorEntity[FoxessDataUpdateCoordinator], RestoreSensor):
+    """Cumulative energy sensor (kWh) calculated via Riemann integration for HA Energy Dashboard."""
+
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_suggested_display_precision = 2
+
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        key: str,
+        name: str,
+        power_fn: Callable[[Any], float | None],
+        device: Any,
+        serial: str,
+    ) -> None:
+        """Initialize the energy accumulator sensor."""
+        super().__init__(coordinator)
+        self._key = key
+        self._attr_name = name
+        self._power_fn = power_fn
+        self._device = device
+        self._attr_unique_id = f"{serial}_{key}"
+        self._attr_device_info = coordinator.device_info
+        self._total_kwh: float = 0.0
+        self._last_time: float | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity restore and registration."""
+        await super().async_added_to_hass()
+        if (last_data := await self.async_get_last_sensor_data()) is not None:
+            if last_data.native_value is not None:
+                try:
+                    self._total_kwh = float(last_data.native_value)
+                except (ValueError, TypeError):
+                    self._total_kwh = 0.0
+        self._last_time = time.monotonic()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Calculate and accumulate energy on each coordinator update."""
+        now = time.monotonic()
+        power = self._power_fn(self._device)
+
+        if self._last_time is not None and power is not None and power > 0:
+            dt = now - self._last_time
+            # Ignore polling gaps > 15 minutes (e.g. system restarts or long outages)
+            if 0 < dt < 900:
+                kwh = (float(power) / 1000.0) * (dt / 3600.0)
+                self._total_kwh += kwh
+
+        self._last_time = now
+        self.async_write_ha_state()
+
+    @property
+    def native_value(self) -> float:
+        """Return the total accumulated energy in kWh."""
+        return round(self._total_kwh, 2)

@@ -32,3 +32,15 @@ class FoxessH3Grid(FoxessComponent):
         """Sum of AC power across all 3 phases in Watts."""
         phases = (self.power_r, self.power_s, self.power_t)
         return float(sum(p for p in phases if p is not None))
+
+    @property
+    def grid_import_power(self) -> float:
+        """Instantaneous power imported from the grid in Watts."""
+        total = self.grid_power_total
+        return float(abs(total)) if total < 0 else 0.0
+
+    @property
+    def grid_export_power(self) -> float:
+        """Instantaneous power exported to the grid in Watts."""
+        total = self.grid_power_total
+        return float(total) if total > 0 else 0.0
