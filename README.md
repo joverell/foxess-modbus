@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon.png" width="120" height="120" alt="FoxESS Modbus Logo" style="border-radius: 26px;">
+  <img src="https://raw.githubusercontent.com/joverell/foxess-modbus/main/icon.png" width="120" height="120" alt="FoxESS Modbus Logo" style="border-radius: 26px;">
 </p>
 
 <h1 align="center">foxess-modbus</h1>
