@@ -22,16 +22,18 @@ from .const import (
     DEFAULT_UNIT_ID,
     DOMAIN,
 )
-from .device.kh10.device import FoxessKH10Inverter
+from .device import create_inverter
 
 _LOGGER = logging.getLogger(__name__)
+
+SUPPORTED_MODELS: list[str] = ["KH10", "H3-Pro", "H3", "H1"]
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
         vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
         vol.Required(CONF_UNIT_ID, default=DEFAULT_UNIT_ID): int,
-        vol.Required(CONF_MODEL, default=DEFAULT_MODEL): vol.In(["KH10"]),
+        vol.Required(CONF_MODEL, default=DEFAULT_MODEL): vol.In(SUPPORTED_MODELS),
     }
 )
 
@@ -41,20 +43,21 @@ async def validate_input(hass: Any, data: dict[str, Any]) -> dict[str, Any]:
     host = data[CONF_HOST]
     port = data[CONF_PORT]
     unit_id = data[CONF_UNIT_ID]
+    model = data[CONF_MODEL]
     params = ModbusTcpParams(host=host, port=port)
 
     try:
         # Use Home Assistant's temporary connection broker to probe the device
         async with async_get_temporary_unit(hass, params, unit_id) as unit:
-            inverter = FoxessKH10Inverter(unit)
+            inverter = create_inverter(unit, model=model)
             report = await inverter.async_update_readings()
             if not report.updated:
                 raise CannotConnect("No registers answered on probe")
     except Exception as err:
-        _LOGGER.error("Cannot connect to FoxESS inverter at %s:%s (unit %s): %s", host, port, unit_id, err)
+        _LOGGER.error("Cannot connect to FoxESS inverter at %s:%s (unit %s, model %s): %s", host, port, unit_id, model, err)
         raise CannotConnect from err
 
-    return {"title": f"FoxESS {data[CONF_MODEL]} ({host})"}
+    return {"title": f"FoxESS {model} ({host})"}
 
 
 class FoxessModernConfigFlow(ConfigFlow, domain=DOMAIN):

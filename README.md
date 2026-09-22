@@ -86,17 +86,21 @@ Navigate to **Settings → Dashboards → Energy** and configure the fields as f
 
 ## Hardware Wiring & Setup Guide
 
-FoxESS inverters communicate over standard half-duplex RS-485 Modbus. To connect the inverter to Home Assistant, an RS-485 to Ethernet/WiFi bridge (e.g. Waveshare, Elfin EW11/EE11, USR-TCP232) or a direct USB RS-485 dongle is required.
+FoxESS inverters communicate over standard half-duplex RS-485 Modbus RTU. To connect the inverter to Home Assistant, an RS-485 to Ethernet/WiFi bridge (e.g. Waveshare, Elfin EW11, USR-TCP232) or a direct USB RS-485 dongle is required.
+
+> [!TIP]
+> 📖 **Comprehensive Field Guide Available:** For step-by-step Waveshare web GUI configuration, Wi-Fi Faraday cage mitigations, UDP fallback, and the complete two-tier power-cycle recovery guide, see our dedicated **[Hardware Setup & Field Observations Guide](docs/HARDWARE_SETUP.md)**.
 
 ### 1. Inverter RJ45 Port Pinouts
 
 Connect twisted-pair wiring (such as standard Cat5e/Cat6) from your RS-485 bridge to the inverter's communication port:
 
-| Inverter Series | Port Label | Pin 1 | Pin 2 | Pin 3 / 7 | Notes |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **KH Series** (Single-Phase Hybrid) | **AUX** or **METER** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | *Some hardware batches use Pin 4 (A) / Pin 5 (B)* |
-| **H1 / AC1 Series** (Single-Phase) | **COM** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | Standard T-568B pair |
-| **H3 / AC3 Series** (Three-Phase) | **RS485** / **METER** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | Standard T-568B pair |
+| Inverter Series | Recommended Port | Pin 1 | Pin 2 | Pin 3 / 7 | Role | Inverter Unit ID |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **KH Series** (Single-Phase Hybrid) | **AUX** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | **Slave** (Passive) | **247** |
+| **H1 / AC1 Series** (Single-Phase) | **COM** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | **Slave** (Passive) | **247** |
+| **H3 / AC3 Series** (Three-Phase) | **RS485** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | **Slave** (Passive) | **247** |
+| **H3-Pro Series** (High Power) | **RS485 / COM** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | **Slave** (Passive) | **247** |
 
 ```text
 RJ45 Connector (Pin 1 on far left, locking tab facing downwards/away):
@@ -106,21 +110,19 @@ RJ45 Connector (Pin 1 on far left, locking tab facing downwards/away):
 |_____|_____|_____|_____|_____|_____|_____|_____|
 ```
 
-> [!IMPORTANT]
-> Always use a dedicated twisted pair for Data+ (A) and Data- (B) to minimize electrical interference from high-frequency inverter switching. If your cable run exceeds 15 meters, enable the 120Ω termination resistor on your RS-485 bridge.
+> [!CAUTION]
+> **Do not connect your Home Assistant bridge to the METER port.**
+> On FoxESS inverters, the **METER** port treats the inverter as the **Hardware Master** actively polling an external CT meter (DDSU666/SDM230). Connecting an active polling gateway here creates dual-master electrical signal collisions on the wire. Always connect Home Assistant to the **AUX** (or **COM**) port, where the inverter acts as a passive **Slave on Unit ID 247**.
 
-### 2. RS-485 to Ethernet Bridge Settings
+### 2. RS-485 Bridge Settings
 
-When using adapters like the **Waveshare RS485 to RJ45 Ethernet Converter**, **Elfin EW11/EE11**, or **USR-TCP232-410s**, configure the serial interface with the following parameters:
+Configure your serial-to-network bridge (e.g. Waveshare, Elfin, USR) with these parameters:
 
-* **Protocol / Mode:** `Modbus TCP to RTU` (or `TCP Server` / `Transparent transfer`)
+* **Protocol / Data Transfer Mode:** `Modbus TCP <=> Modbus RTU` *(essential for CRC calculation)*
 * **Local Port:** `502`
 * **Baud Rate:** `9600` *(standard for AUX/COM; certain LAN firmware builds use `115200`)*
-* **Data Bits:** `8`
-* **Parity:** `None`
-* **Stop Bits:** `1`
-* **Flow Control:** `None`
-* **Inverter Slave / Unit ID:** `247` *(FoxESS factory default; inspectable via inverter LCD screen)*
+* **Data Bits:** `8` | **Parity:** `None` | **Stop Bits:** `1`
+* **Inverter Slave / Unit ID:** `247` *(FoxESS factory default; inspectable via LCD screen)*
 
 ### 3. Shared Gateway Friendly (`modbus-connection`)
 
