@@ -26,7 +26,12 @@ from .device import create_inverter
 
 _LOGGER = logging.getLogger(__name__)
 
-SUPPORTED_MODELS: list[str] = ["KH10", "H3-Pro", "H3", "H1"]
+SUPPORTED_MODELS: list[str] = [
+    "KH Series (KH7 - KH10.5)",
+    "H3 Series (H3 / H3 Smart / AC3)",
+    "H3-Pro Series (15kW - 30kW)",
+    "H1 / AC1 Series",
+]
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
