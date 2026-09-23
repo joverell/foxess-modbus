@@ -16,7 +16,6 @@ class FoxessKH10Control(FoxessComponent):
 
     raw_work_mode = integer(41000, writable=True)
     max_charge_current = gauge(41007, 0.1, signed=False, writable=True, unit="A")
-    max_discharge_current = gauge(41008, 0.1, signed=False, writable=True, unit="A")
     min_soc = integer(41009, writable=True, unit="%")
     max_soc = integer(41010, writable=True, unit="%")
     min_soc_on_grid = integer(41011, writable=True, unit="%")
