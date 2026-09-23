@@ -269,30 +269,86 @@ class FoxessModernOptionsFlow(OptionsFlow):
             self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
         )
 
-        if user_input is not None:
-            scan_interval = user_input.get(CONF_SCAN_INTERVAL, current_scan_interval)
-            mappings = {
-                k: v for k, v in user_input.items()
-                if k != CONF_SCAN_INTERVAL and v and v != DEFAULT_CREATE_NEW
-            }
-            return self.async_create_entry(
-                title="",
-                data={CONF_MAPPINGS: mappings, CONF_SCAN_INTERVAL: scan_interval},
-            )
-
-        model = self._config_entry.data.get(CONF_MODEL, DEFAULT_MODEL)
-        keys = get_migratable_keys_for_model(model)
-        entity_reg = er.async_get(self.hass)
-        matches = find_smart_matches(entity_reg, keys)
         current_mappings = self._config_entry.options.get(
             CONF_MAPPINGS, self._config_entry.data.get(CONF_MAPPINGS, {})
         )
+
+        if user_input is not None:
+            scan_interval = user_input.get(CONF_SCAN_INTERVAL, current_scan_interval)
+
+            if user_input.get("reconfigure_legacy_mappings"):
+                return await self.async_step_migration_mapping()
+
+            mappings = {
+                k: v for k, v in user_input.items()
+                if k not in (CONF_SCAN_INTERVAL, "reconfigure_legacy_mappings")
+                and v and v != DEFAULT_CREATE_NEW
+            }
+
+            final_mappings = current_mappings if not mappings and not any(k in user_input for k in current_mappings) else mappings
+
+            return self.async_create_entry(
+                title="",
+                data={CONF_MAPPINGS: final_mappings, CONF_SCAN_INTERVAL: scan_interval},
+            )
 
         schema_dict: dict[Any, Any] = {
             vol.Optional(CONF_SCAN_INTERVAL, default=current_scan_interval): vol.In(
                 ALLOWED_SCAN_INTERVALS
             )
         }
+
+        # Only display individual mapping dropdowns if the entry actually has active mappings configured
+        if current_mappings:
+            model = self._config_entry.data.get(CONF_MODEL, DEFAULT_MODEL)
+            keys = get_migratable_keys_for_model(model)
+            entity_reg = er.async_get(self.hass)
+            matches = find_smart_matches(entity_reg, keys)
+
+            for key, _label, _platform in keys:
+                options, smart_default = matches[key]
+                current_val = current_mappings.get(key, smart_default)
+                if current_val not in options:
+                    options = [current_val] + options
+                schema_dict[vol.Optional(key, default=current_val)] = vol.In(options)
+        else:
+            has_legacy = bool(self.hass.config_entries.async_entries(LEGACY_DOMAIN))
+            if has_legacy:
+                schema_dict[vol.Optional("reconfigure_legacy_mappings", default=False)] = bool
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(schema_dict),
+        )
+
+    async def async_step_migration_mapping(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle optional legacy entity re-mapping step."""
+        current_mappings = self._config_entry.options.get(
+            CONF_MAPPINGS, self._config_entry.data.get(CONF_MAPPINGS, {})
+        )
+        current_scan_interval = self._config_entry.options.get(
+            CONF_SCAN_INTERVAL,
+            self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        )
+
+        if user_input is not None:
+            mappings = {
+                k: v for k, v in user_input.items()
+                if v and v != DEFAULT_CREATE_NEW
+            }
+            return self.async_create_entry(
+                title="",
+                data={CONF_MAPPINGS: mappings, CONF_SCAN_INTERVAL: current_scan_interval},
+            )
+
+        model = self._config_entry.data.get(CONF_MODEL, DEFAULT_MODEL)
+        keys = get_migratable_keys_for_model(model)
+        entity_reg = er.async_get(self.hass)
+        matches = find_smart_matches(entity_reg, keys)
+
+        schema_dict: dict[Any, Any] = {}
         for key, _label, _platform in keys:
             options, smart_default = matches[key]
             current_val = current_mappings.get(key, smart_default)
@@ -301,7 +357,7 @@ class FoxessModernOptionsFlow(OptionsFlow):
             schema_dict[vol.Optional(key, default=current_val)] = vol.In(options)
 
         return self.async_show_form(
-            step_id="init",
+            step_id="migration_mapping",
             data_schema=vol.Schema(schema_dict),
         )
 

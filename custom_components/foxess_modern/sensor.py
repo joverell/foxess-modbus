@@ -975,8 +975,8 @@ class FoxessEnergySensor(CoordinatorEntity[FoxessDataUpdateCoordinator], Restore
 
     @property
     def available(self) -> bool:
-        """Return True if entity is available."""
-        return self.coordinator.is_available
+        """Return True so long-term energy statistics persist across night power-downs."""
+        return True
 
     @property
     def native_value(self) -> float:

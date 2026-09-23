@@ -12,7 +12,7 @@ The integration and device library are built strictly on top of [`modbus-connect
 +-------------------------------------------------------------------------+
 |                  Home Assistant Custom Integration                      |
 |                     (custom_components/foxess_modern)                   |
-|   - Config flow & options flow                                          |
+|   - Config flow & streamlined options flow                              |
 |   - DataUpdateCoordinator[UpdateReport]                                 |
 |   - CoordinatorEntity instances (sensor, number, select)                |
 +-------------------------------------------------------------------------+
@@ -90,29 +90,42 @@ This guarantees that `modbus-connection`'s read planner will never merge request
 
 ---
 
-## 4. Invariant 3: UpdateReport-Driven Coordinator Lifecycle
+## 4. Invariant 3: Official modbus-connection Coordinator Lifecycle
 
 ### The Rule
-Never raise `UpdateFailed` on individual sub-system read failures. Only sustained, complete communication loss should ever raise `UpdateFailed`.
+Manage `DataUpdateCoordinator[UpdateReport]`. Count timeouts on the fast poll coordinator and call `await self.device.modbus_unit.disconnect()` after 3 consecutive dead timeouts. Only raise `UpdateFailed` when no sub-system answered or when the link is lost.
 
 ### Why This Rule Exists
-Home Assistant Core's `DataUpdateCoordinator` has a built-in behavior:
-1. When `UpdateFailed` is raised, `coordinator.last_update_success` becomes `False`.
-2. Any `CoordinatorEntity` checking `super().available` immediately transitions to `unavailable`.
-3. Home Assistant Core imposes a mandatory 60-second retry backoff timer.
-4. If an integration raises `UpdateFailed` because 1 non-critical sub-system (such as BMS) dropped a frame, all 45 entities stay marked `unavailable` for a full 60 seconds even though the inverter was healthy.
+The official Home Assistant Modbus architecture requires:
+1. When `report.updated` contains refreshed sub-systems, those entities update live. Any sub-system that temporarily dropped a frame lands in `report.failed` without failing the overall poll.
+2. If the bridge wedges and keeps the socket open while the inverter stops answering, `Device.async_poll` propagates `ModbusTimeoutError` when nothing has answered yet. Counting 3 consecutive timeouts in the fast coordinator and calling `await self.device.modbus_unit.disconnect()` recycles the bridge connection cleanly.
+3. Cumulative statistics (`RestoreSensor` with `state_class=TOTAL_INCREASING`) must remain `available = True` so long-term energy history and the Home Assistant Energy Dashboard never have gaps during nightly inverter power-downs.
 
 ### The Standard Implementation
-1. The coordinator stores `DataUpdateCoordinator[UpdateReport]`.
-2. Partial reads return the report so active sub-systems update cleanly.
-3. Entities bind availability to their specific sub-system report name:
-   ```python
-   @property
-   def available(self) -> bool:
-       return self.coordinator.is_available
-   ```
-4. If a serial bridge wedges, call `await unit.disconnect()` after 3 consecutive failures to reset the TCP socket cleanly.
-5. Only raise `UpdateFailed` after sustained failure (e.g. 8 consecutive failed cycles = 80 to 120 seconds of continuous carrier loss).
+```python
+async def _async_update_data(self) -> UpdateReport:
+    try:
+        report: UpdateReport = await self._update_method()
+    except ModbusTimeoutError as err:
+        if self._is_fast_poll:
+            self._timeouts += 1
+            if self._timeouts >= 3:
+                unit = getattr(self.device, "modbus_unit", None)
+                if unit and hasattr(unit, "disconnect"):
+                    await unit.disconnect()
+        raise UpdateFailed(str(err)) from err
+    except ModbusError as err:
+        raise UpdateFailed(str(err)) from err
+
+    if self._is_fast_poll:
+        self._timeouts = 0
+
+    if not report.updated:
+        errors = list(report.failed.values())
+        raise UpdateFailed(f"no sub-system answered: {errors[0] if errors else 'unknown'}")
+
+    return report
+```
 
 ---
 
@@ -150,5 +163,7 @@ Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Does the change use `modbus_connection.tmodbus.ModbusConnection`?
 * [ ] Are all block read counts strictly `<= 8`?
 * [ ] Is `message_spacing` kept at `>= 0.08` (recommended: 0.1s)?
-* [ ] Does `_async_update_data()` return prior telemetry across transient glitches rather than throwing `UpdateFailed`?
+* [ ] Does `FoxessDevice` inherit `Device.async_poll` directly without overriding?
+* [ ] Does the coordinator recycle the bridge via `self.device.modbus_unit.disconnect()` after 3 consecutive dead timeouts?
+* [ ] Do cumulative energy sensors (`RestoreSensor`) maintain `available = True`?
 * [ ] Do all 35 tests in `pytest tests/` pass?

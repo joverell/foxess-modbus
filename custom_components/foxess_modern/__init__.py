@@ -40,6 +40,9 @@ SERVICE_CLEAR_OVERRIDES = "clear_overrides"
 SERVICE_SET_WORK_MODE = "set_work_mode"
 
 
+from modbus_connection import ModbusConnection
+
+
 @dataclass
 class FoxessRuntimeData:
     """Runtime data held by the FoxESS Modern config entry."""
@@ -48,6 +51,7 @@ class FoxessRuntimeData:
     settings_coordinator: FoxessDataUpdateCoordinator
     device: Any
     unit: ResilientModbusUnit
+    connection: ModbusConnection
 
 
 type FoxessConfigEntry = ConfigEntry[FoxessRuntimeData]
@@ -137,6 +141,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         device,
         device.async_update_readings,
         timedelta(seconds=scan_interval),
+        is_fast_poll=True,
     )
     settings_coordinator = FoxessDataUpdateCoordinator(
         hass,
@@ -144,6 +149,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         device,
         device.async_update_settings,
         timedelta(seconds=SETTINGS_SCAN_INTERVAL),
+        is_fast_poll=False,
     )
 
     # Initial data refresh
@@ -159,6 +165,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         settings_coordinator=settings_coordinator,
         device=device,
         unit=unit,
+        connection=unit.connection,
     )
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
@@ -180,5 +187,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> b
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok and hasattr(entry, "runtime_data") and entry.runtime_data:
-        await entry.runtime_data.unit.close()
+        await entry.runtime_data.connection.close()
     return unload_ok

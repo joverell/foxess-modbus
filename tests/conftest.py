@@ -78,6 +78,10 @@ class MockNumberEntity:
     pass
 
 
+class MockRestoreNumber(MockNumberEntity):
+    pass
+
+
 class MockCoordinatorEntity:
     def __init__(self, coordinator):
         self.coordinator = coordinator
@@ -88,7 +92,7 @@ class MockCoordinatorEntity:
 
 class MockDataUpdateCoordinator:
     def __init__(self, *args, **kwargs):
-        pass
+        self.last_update_success = True
 
     def __class_getitem__(cls, item):
         return cls
@@ -199,6 +203,7 @@ sys.modules["homeassistant.components.sensor"].SensorDeviceClass = MockSensorDev
 sys.modules["homeassistant.components.sensor"].SensorStateClass = MockSensorStateClass
 sys.modules["homeassistant.components.select"].SelectEntity = MockSelectEntity
 sys.modules["homeassistant.components.number"].NumberEntity = MockNumberEntity
+sys.modules["homeassistant.components.number"].RestoreNumber = MockRestoreNumber
 sys.modules["homeassistant.components.number"].NumberDeviceClass = MockNumberDeviceClass
 sys.modules["homeassistant.components.number"].NumberMode = MockNumberMode
 sys.modules["homeassistant.components.modbus"].async_get_unit = MagicMock()
