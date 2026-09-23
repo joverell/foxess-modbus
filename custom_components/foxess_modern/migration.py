@@ -68,7 +68,6 @@ LEGACY_KEY_ALIASES: dict[str, list[str]] = {
         "battery_charge_total_2",
         "charge_energy_total",
         "charge_energy",
-        "battery_charge",
     ],
     "battery_charge_energy_today": ["battery_charge_today"],
     "battery_discharge_energy_total": [
@@ -76,7 +75,6 @@ LEGACY_KEY_ALIASES: dict[str, list[str]] = {
         "battery_discharge_total_2",
         "discharge_energy_total",
         "discharge_energy",
-        "battery_discharge",
     ],
     "battery_discharge_energy_today": ["battery_discharge_today"],
     "house_load_energy_total": ["load_power_total", "load_energy_total"],
