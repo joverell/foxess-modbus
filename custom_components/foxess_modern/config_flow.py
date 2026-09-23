@@ -15,7 +15,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import entity_registry as er, selector
 
 from .const import (
     ALLOWED_SCAN_INTERVALS,
@@ -274,7 +274,11 @@ class FoxessModernOptionsFlow(OptionsFlow):
         )
 
         if user_input is not None:
-            scan_interval = user_input.get(CONF_SCAN_INTERVAL, current_scan_interval)
+            raw_scan_interval = user_input.get(CONF_SCAN_INTERVAL, current_scan_interval)
+            try:
+                scan_interval = int(raw_scan_interval)
+            except (ValueError, TypeError):
+                scan_interval = current_scan_interval
 
             if user_input.get("reconfigure_legacy_mappings"):
                 return await self.async_step_migration_mapping()
@@ -292,9 +296,23 @@ class FoxessModernOptionsFlow(OptionsFlow):
                 data={CONF_MAPPINGS: final_mappings, CONF_SCAN_INTERVAL: scan_interval},
             )
 
+        interval_options = [
+            selector.SelectOptionDict(value="5", label="5 seconds"),
+            selector.SelectOptionDict(value="10", label="10 seconds"),
+            selector.SelectOptionDict(value="15", label="15 seconds (Recommended)"),
+            selector.SelectOptionDict(value="30", label="30 seconds"),
+            selector.SelectOptionDict(value="60", label="60 seconds"),
+        ]
+        curr_str = str(current_scan_interval)
+        if not any(opt["value"] == curr_str for opt in interval_options):
+            interval_options.append(selector.SelectOptionDict(value=curr_str, label=f"{curr_str} seconds"))
+
         schema_dict: dict[Any, Any] = {
-            vol.Optional(CONF_SCAN_INTERVAL, default=current_scan_interval): vol.In(
-                ALLOWED_SCAN_INTERVALS
+            vol.Optional(CONF_SCAN_INTERVAL, default=curr_str): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=interval_options,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
             )
         }
 

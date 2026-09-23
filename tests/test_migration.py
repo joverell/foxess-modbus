@@ -29,6 +29,7 @@ ha_modules = [
     "homeassistant.components.sensor",
     "homeassistant.components.select",
     "homeassistant.components.number",
+    "homeassistant.helpers.selector",
 ]
 
 for name in ha_modules:
@@ -101,6 +102,15 @@ sys.modules["homeassistant.config_entries"].ConfigFlow = MockConfigFlow
 sys.modules["homeassistant.config_entries"].OptionsFlow = MockOptionsFlow
 sys.modules["homeassistant.config_entries"].ConfigEntry = MagicMock
 sys.modules["homeassistant.config_entries"].ConfigFlowResult = MagicMock
+
+mock_sel = types.ModuleType("homeassistant.helpers.selector")
+mock_sel.SelectSelector = MagicMock
+mock_sel.SelectSelectorConfig = MagicMock
+mock_sel.SelectOptionDict = dict
+mock_sel.SelectSelectorMode = MagicMock()
+mock_sel.SelectSelectorMode.DROPDOWN = "dropdown"
+sys.modules["homeassistant.helpers.selector"] = mock_sel
+sys.modules["homeassistant.helpers"].selector = mock_sel
 class MockNumberDeviceClass:
     BATTERY = "battery"
     POWER = "power"

@@ -57,7 +57,8 @@
           "battery_charge_energy_total": "Battery Charge Energy Total (kWh)",
           "battery_discharge_energy_total": "Battery Discharge Energy Total (kWh)",
           "work_mode": "Inverter Work Mode Select",
-          "min_soc": "Min SoC Number Entity"
+          "min_soc": "Min SoC Number Entity",
+          "reconfigure_legacy_mappings": "Reconfigure legacy sensor entity ID mappings"
         }
       }
     }
