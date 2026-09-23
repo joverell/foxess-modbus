@@ -57,68 +57,38 @@ def find_smart_matches(
     keys: tuple[tuple[str, str, str], ...] | None = None,
 ) -> dict[str, tuple[list[str], str]]:
     """Find candidate entities and smart matches for migratable keys."""
+    from .migration import resolve_clean_entity_id
+
     results: dict[str, tuple[list[str], str]] = {}
     target_keys = keys if keys is not None else MIGRATABLE_KEYS
 
-    aliases: dict[str, list[str]] = {
-        "pv_power_total": ["pv_power"],
-        "pv1_power": ["pv1_power"],
-        "pv2_power": ["pv2_power"],
-        "pv3_power": ["pv3_power"],
-        "pv4_power": ["pv4_power"],
-        "pv5_power": ["pv5_power"],
-        "pv6_power": ["pv6_power"],
-        "grid_ct_meter_power": ["feed_in_power", "feed_in_2", "feed_in", "grid_power", "meter_power", "ct_power"],
-        "house_load_power": ["load_power", "house_load", "consumption_power"],
-        "grid_import_energy_total": [
-            "grid_consumption_energy_total",
-            "import_energy_total",
-            "grid_consumption_energy",
-            "import_energy",
-        ],
-        "grid_export_energy_total": [
-            "feed_in_energy_total",
-            "export_energy_total",
-            "export_energy",
-            "feed_in_energy",
-        ],
-        "battery_charge_energy_total": [
-            "battery_charge_total",
-            "charge_energy_total",
-            "charge_energy",
-            "battery_charge",
-        ],
-        "battery_discharge_energy_total": [
-            "battery_discharge_total",
-            "discharge_energy_total",
-            "discharge_energy",
-            "battery_discharge",
-        ],
-        "pv1_energy_total": ["pv1_energy_total_2", "pv1_energy_total"],
-        "pv2_energy_total": ["pv2_energy_total_2", "pv2_energy_total"],
-        "work_mode": ["work_mode", "inverter_mode"],
-        "min_soc": ["min_soc"],
-        "max_soc": ["max_soc"],
-        "min_soc_on_grid": ["min_soc_on_grid"],
-        "max_charge_current": ["max_charge_current"],
-        "max_discharge_current": ["max_discharge_current"],
-        "export_power_limit": ["export_power_limit"],
-        "import_power_limit": ["import_power_limit"],
-    }
+    # Collect legacy entities from both active entities and deleted_entities
+    legacy_entities: list[Any] = [
+        entity
+        for entity in entity_reg.entities.values()
+        if entity.platform == LEGACY_DOMAIN
+    ]
+    if hasattr(entity_reg, "deleted_entities") and entity_reg.deleted_entities:
+        legacy_entities.extend([
+            del_ent
+            for del_ent in entity_reg.deleted_entities.values()
+            if getattr(del_ent, "platform", None) == LEGACY_DOMAIN
+        ])
 
     for key, _label, platform in target_keys:
         candidates = [
             entity.entity_id
-            for entity in entity_reg.entities.values()
-            if entity.domain == platform
-            and entity.platform == LEGACY_DOMAIN
+            for entity in legacy_entities
+            if getattr(entity, "domain", None) == platform
+            and not any(x in entity.entity_id for x in ["foxess_kh_", "192_168_86_162"])
         ]
         if not candidates:
             candidates = [
                 entity.entity_id
                 for entity in entity_reg.entities.values()
                 if entity.domain == platform
-                and entity.platform != DOMAIN
+                and entity.platform not in (DOMAIN, "foxess_modern")
+                and not any(x in entity.entity_id for x in ["foxess_kh_", "192_168_86_162"])
                 and (
                     "foxess" in entity.entity_id.lower()
                     or key in entity.entity_id.lower()
@@ -126,40 +96,18 @@ def find_smart_matches(
             ]
         candidates = sorted(set(candidates))
 
-        smart_match = DEFAULT_CREATE_NEW
+        smart_match = resolve_clean_entity_id(entity_reg, key, platform, fallback=False)
 
-        # Match 1: candidate ends with key or contains _key_ or .key
-        for cand in candidates:
-            cand_lower = cand.lower()
-            if cand_lower.endswith(f"_{key}") or f"_{key}_" in cand_lower or cand_lower.endswith(f".{key}"):
-                smart_match = cand
-                break
+        options_list = [DEFAULT_CREATE_NEW]
+        if smart_match:
+            options_list.append(smart_match)
 
-        # Match 2: check aliases if still not found
-        if smart_match == DEFAULT_CREATE_NEW:
-            # First check exact suffix match across all aliases
-            for alias in aliases.get(key, []):
-                for cand in candidates:
-                    cand_lower = cand.lower()
-                    if cand_lower.endswith(f"_{alias}") or cand_lower.endswith(f".{alias}"):
-                        smart_match = cand
-                        break
-                if smart_match != DEFAULT_CREATE_NEW:
-                    break
+        for c in candidates:
+            if c not in options_list:
+                options_list.append(c)
 
-        if smart_match == DEFAULT_CREATE_NEW:
-            # Second check substring match across aliases
-            for alias in aliases.get(key, []):
-                for cand in candidates:
-                    cand_lower = cand.lower()
-                    if alias in cand_lower:
-                        smart_match = cand
-                        break
-                if smart_match != DEFAULT_CREATE_NEW:
-                    break
-
-        options = [DEFAULT_CREATE_NEW] + candidates
-        results[key] = (options, smart_match)
+        default_val = smart_match if smart_match else DEFAULT_CREATE_NEW
+        results[key] = (options_list, default_val)
 
     return results
 

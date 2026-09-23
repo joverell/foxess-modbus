@@ -163,6 +163,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
+    from .migration import async_migrate_entity_registry
+
+    await async_migrate_entity_registry(hass, entry)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

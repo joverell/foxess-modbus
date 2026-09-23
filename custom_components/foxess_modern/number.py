@@ -131,10 +131,13 @@ async def async_setup_entry(
         )
     )
 
-    async_add_entities(entities)
+class FoxessBaseNumberEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+    """Base class for FoxESS Modern number entities."""
+
+    _attr_has_entity_name = False
 
 
-class FoxessMinSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+class FoxessMinSocNumber(FoxessBaseNumberEntity):
     """Number entity for setting Inverter Min SOC."""
 
     _attr_native_min_value = 10.0
@@ -179,7 +182,7 @@ class FoxessMinSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberE
         await self.coordinator.async_request_refresh()
 
 
-class FoxessMaxSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+class FoxessMaxSocNumber(FoxessBaseNumberEntity):
     """Number entity for setting Inverter Max SOC."""
 
     _attr_native_min_value = 10.0
@@ -224,7 +227,7 @@ class FoxessMaxSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberE
         await self.coordinator.async_request_refresh()
 
 
-class FoxessMinSocOnGridNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+class FoxessMinSocOnGridNumber(FoxessBaseNumberEntity):
     """Number entity for setting Inverter Min SOC on Grid."""
 
     _attr_native_min_value = 10.0
@@ -269,7 +272,7 @@ class FoxessMinSocOnGridNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], N
         await self.coordinator.async_request_refresh()
 
 
-class FoxessMaxChargeCurrentNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+class FoxessMaxChargeCurrentNumber(FoxessBaseNumberEntity):
     """Number entity for setting Max Charge Current."""
 
     _attr_native_min_value = 0.0
@@ -314,7 +317,7 @@ class FoxessMaxChargeCurrentNumber(CoordinatorEntity[FoxessDataUpdateCoordinator
         await self.coordinator.async_request_refresh()
 
 
-class FoxessMaxDischargeCurrentNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+class FoxessMaxDischargeCurrentNumber(FoxessBaseNumberEntity):
     """Number entity for setting Max Discharge Current."""
 
     _attr_native_min_value = 0.0
@@ -359,7 +362,7 @@ class FoxessMaxDischargeCurrentNumber(CoordinatorEntity[FoxessDataUpdateCoordina
         await self.coordinator.async_request_refresh()
 
 
-class FoxessExportPowerLimitNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+class FoxessExportPowerLimitNumber(FoxessBaseNumberEntity):
     """Number entity for setting Export Power Limit."""
 
     _attr_native_min_value = 0.0
@@ -404,7 +407,7 @@ class FoxessExportPowerLimitNumber(CoordinatorEntity[FoxessDataUpdateCoordinator
         await self.coordinator.async_request_refresh()
 
 
-class FoxessImportPowerLimitNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+class FoxessImportPowerLimitNumber(FoxessBaseNumberEntity):
     """Number entity for setting Import Power Limit."""
 
     _attr_native_min_value = 0.0
@@ -466,7 +469,7 @@ def get_max_inverter_power(device: Any) -> float:
     return 30000.0
 
 
-class FoxessForceChargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+class FoxessForceChargePowerNumber(FoxessBaseNumberEntity):
     """Number entity for setting Force Charge Power."""
 
     _attr_native_min_value = 0.0
@@ -510,7 +513,7 @@ class FoxessForceChargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordinator
         self._target_power = value
 
 
-class FoxessForceDischargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+class FoxessForceDischargePowerNumber(FoxessBaseNumberEntity):
     """Number entity for setting Force Discharge Power."""
 
     _attr_native_min_value = 0.0

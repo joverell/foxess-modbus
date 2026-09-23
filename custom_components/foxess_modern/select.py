@@ -53,6 +53,7 @@ async def async_setup_entry(
 class FoxessWorkModeSelect(CoordinatorEntity[FoxessDataUpdateCoordinator], SelectEntity):
     """Select entity for inverter work mode."""
 
+    _attr_has_entity_name = False
     _attr_options = list(_WORK_MODE_OPTIONS.keys())
 
     def __init__(

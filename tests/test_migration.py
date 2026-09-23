@@ -383,3 +383,48 @@ def test_adopt_legacy_entity_id():
     assert adopted_soc == "number.min_soc"
     reg.async_remove.assert_called_with("number.min_soc")
 
+
+async def test_async_migrate_entity_registry():
+    """Verify async_migrate_entity_registry renames prefixed entities to clean 1:1 legacy IDs."""
+    from custom_components.foxess_modern.migration import async_migrate_entity_registry
+
+    hass = MagicMock()
+    reg = MagicMock()
+    reg.entities = {}
+    reg.deleted_entities = {}
+
+    # Mock legacy entity in deleted_entities
+    del_entry = MagicMock(platform="foxess_modbus", domain="sensor", entity_id="sensor.pv1_power", unique_id="foxess_modbus_pv1_power")
+    reg.deleted_entities[("foxess_modbus", "foxess_modbus_pv1_power")] = del_entry
+
+    # Mock modern entity with long prefix
+    modern_entry = MagicMock(
+        platform="foxess_modern",
+        domain="sensor",
+        entity_id="sensor.foxess_kh_series_kh7_kh10_5_192_168_86_162_502_247_pv1_power",
+        unique_id="192.168.86.162_502_247_pv1_power",
+        config_entry_id="test_entry_id",
+    )
+    reg.entities[modern_entry.entity_id] = modern_entry
+
+    hass_er = sys.modules["homeassistant.helpers.entity_registry"]
+    hass_er.async_get = MagicMock(return_value=reg)
+    hass_er.async_entries_for_config_entry = MagicMock(return_value=[modern_entry])
+
+    entry = MagicMock()
+    entry.entry_id = "test_entry_id"
+    entry.unique_id = "192.168.86.162_502_247"
+    entry.options = {}
+    entry.data = {}
+
+    await async_migrate_entity_registry(hass, entry)
+
+    # Verify modern entity was updated to clean sensor.pv1_power
+    reg.async_update_entity.assert_called_with(
+        "sensor.foxess_kh_series_kh7_kh10_5_192_168_86_162_502_247_pv1_power",
+        new_entity_id="sensor.pv1_power",
+    )
+    # Verify legacy entry was purged from deleted_entities to prevent collisions
+    assert ("foxess_modbus", "foxess_modbus_pv1_power") not in reg.deleted_entities
+
+

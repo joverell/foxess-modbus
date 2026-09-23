@@ -878,6 +878,7 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
     """Representation of a FoxESS Modern sensor."""
 
     entity_description: FoxessSensorDescription
+    _attr_has_entity_name = False
 
     def __init__(
         self,
@@ -908,6 +909,7 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
 class FoxessEnergySensor(CoordinatorEntity[FoxessDataUpdateCoordinator], RestoreSensor):
     """Cumulative energy sensor (kWh) calculated via Riemann integration for HA Energy Dashboard."""
 
+    _attr_has_entity_name = False
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
