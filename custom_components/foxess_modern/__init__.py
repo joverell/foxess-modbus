@@ -11,12 +11,14 @@ from modbus_connection import ModbusTcpParams
 from homeassistant.components.modbus import async_get_unit
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from typing import Any
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import (
     CONF_HOST,
     CONF_PORT,
+    CONF_SCAN_INTERVAL,
     CONF_UNIT_ID,
     DOMAIN,
     SCAN_INTERVAL,
@@ -24,6 +26,7 @@ from .const import (
 )
 from .coordinator import FoxessDataUpdateCoordinator
 from .device import create_inverter
+from .device.const import WorkMode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +36,11 @@ PLATFORMS: list[Platform] = [
     Platform.SELECT,
 ]
 
+SERVICE_SET_FORCE_CHARGE = "set_force_charge"
+SERVICE_SET_FORCE_DISCHARGE = "set_force_discharge"
+SERVICE_CLEAR_OVERRIDES = "clear_overrides"
+SERVICE_SET_WORK_MODE = "set_work_mode"
+
 
 @dataclass
 class FoxessRuntimeData:
@@ -40,10 +48,74 @@ class FoxessRuntimeData:
 
     readings_coordinator: FoxessDataUpdateCoordinator
     settings_coordinator: FoxessDataUpdateCoordinator
-    device: FoxessKH10Inverter
+    device: Any
 
 
 type FoxessConfigEntry = ConfigEntry[FoxessRuntimeData]
+
+
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
+    """Set up the FoxESS Modern component and register services."""
+
+    async def async_handle_set_force_charge(call: ServiceCall) -> None:
+        """Handle force charge service call."""
+        power = int(call.data.get("power", 5000))
+        max_soc = int(call.data.get("max_soc", 100))
+        duration = int(call.data.get("duration", 3600))
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(entry, "runtime_data") and entry.runtime_data:
+                await entry.runtime_data.device.async_set_force_charge(
+                    power_w=power, max_soc=max_soc, timeout_sec=duration
+                )
+                await entry.runtime_data.settings_coordinator.async_request_refresh()
+
+    async def async_handle_set_force_discharge(call: ServiceCall) -> None:
+        """Handle force discharge service call."""
+        power = int(call.data.get("power", 5000))
+        min_soc = int(call.data.get("min_soc", 10))
+        duration = int(call.data.get("duration", 3600))
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(entry, "runtime_data") and entry.runtime_data:
+                await entry.runtime_data.device.async_set_force_discharge(
+                    power_w=power, min_soc=min_soc, timeout_sec=duration
+                )
+                await entry.runtime_data.settings_coordinator.async_request_refresh()
+
+    async def async_handle_clear_overrides(call: ServiceCall) -> None:
+        """Handle clear overrides service call."""
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(entry, "runtime_data") and entry.runtime_data:
+                await entry.runtime_data.device.async_clear_overrides()
+                await entry.runtime_data.settings_coordinator.async_request_refresh()
+
+    async def async_handle_set_work_mode(call: ServiceCall) -> None:
+        """Handle set work mode service call."""
+        mode_str = call.data.get("work_mode", "Self Use")
+        mode_map = {
+            "Self Use": WorkMode.SELF_USE,
+            "Feed-in First": WorkMode.FEED_IN_FIRST,
+            "Back-up": WorkMode.BACK_UP,
+        }
+        mode = mode_map.get(mode_str, WorkMode.SELF_USE)
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(entry, "runtime_data") and entry.runtime_data:
+                await entry.runtime_data.device.async_set_work_mode(mode)
+                await entry.runtime_data.settings_coordinator.async_request_refresh()
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_FORCE_CHARGE, async_handle_set_force_charge
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_FORCE_DISCHARGE, async_handle_set_force_discharge
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_CLEAR_OVERRIDES, async_handle_clear_overrides
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_WORK_MODE, async_handle_set_work_mode
+    )
+
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bool:
@@ -63,12 +135,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
 
     device = create_inverter(unit, serial_number=serial, model=entry.data.get("model"))
 
+    scan_interval = entry.options.get(
+        CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL, SCAN_INTERVAL)
+    )
+
     readings_coordinator = FoxessDataUpdateCoordinator(
         hass,
         entry,
         device,
         device.async_update_readings,
-        timedelta(seconds=SCAN_INTERVAL),
+        timedelta(seconds=scan_interval),
     )
     settings_coordinator = FoxessDataUpdateCoordinator(
         hass,

@@ -75,11 +75,27 @@ class FoxessMinSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberE
         await self.coordinator.async_request_refresh()
 
 
+def get_max_inverter_power(device: Any) -> float:
+    """Determine maximum charge/discharge power limit based on inverter model."""
+    name = (
+        str(getattr(device, "model", "") or getattr(device, "series", ""))
+        or type(device).__name__
+    ).upper()
+    if "PRO" in name or "H3-PRO" in name or "30" in name:
+        return 30000.0
+    if "H3" in name or "AC3" in name:
+        return 12000.0
+    if "KH" in name:
+        return 10500.0
+    if "H1" in name or "AC1" in name:
+        return 6000.0
+    return 30000.0
+
+
 class FoxessForceChargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
     """Number entity for setting Force Charge Power."""
 
     _attr_native_min_value = 0.0
-    _attr_native_max_value = 10500.0
     _attr_native_step = 100.0
     _attr_native_unit_of_measurement = UnitOfPower.WATT
     _attr_device_class = NumberDeviceClass.POWER
@@ -92,6 +108,7 @@ class FoxessForceChargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordinator
         self._attr_unique_id = f"{serial}_force_charge_power"
         self._attr_name = "Force Charge Power"
         self._attr_device_info = coordinator.device_info
+        self._attr_native_max_value = get_max_inverter_power(device)
         self._target_power: float = 5000.0
 
     @property
@@ -108,7 +125,6 @@ class FoxessForceDischargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordina
     """Number entity for setting Force Discharge Power."""
 
     _attr_native_min_value = 0.0
-    _attr_native_max_value = 10500.0
     _attr_native_step = 100.0
     _attr_native_unit_of_measurement = UnitOfPower.WATT
     _attr_device_class = NumberDeviceClass.POWER
@@ -121,6 +137,7 @@ class FoxessForceDischargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordina
         self._attr_unique_id = f"{serial}_force_discharge_power"
         self._attr_name = "Force Discharge Power"
         self._attr_device_info = coordinator.device_info
+        self._attr_native_max_value = get_max_inverter_power(device)
         self._target_power: float = 5000.0
 
     @property

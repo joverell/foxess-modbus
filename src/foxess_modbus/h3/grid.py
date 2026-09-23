@@ -27,6 +27,18 @@ class FoxessH3Grid(FoxessComponent):
 
     frequency = gauge(31015, 0.01, signed=False, unit="Hz")
 
+    # EPS (Emergency Power Supply) telemetry
+    eps_power_r = integer(31022, signed=True, unit="W")
+    eps_power_s = integer(31023, signed=True, unit="W")
+    eps_power_t = integer(31024, signed=True, unit="W")
+    eps_frequency = gauge(31025, 0.01, signed=False, unit="Hz")
+
+    @property
+    def eps_power_total(self) -> float:
+        """Sum of EPS power across all 3 phases in Watts."""
+        phases = (self.eps_power_r, self.eps_power_s, self.eps_power_t)
+        return float(sum(p for p in phases if p is not None))
+
     @property
     def grid_power_total(self) -> float:
         """Sum of AC power across all 3 phases in Watts."""

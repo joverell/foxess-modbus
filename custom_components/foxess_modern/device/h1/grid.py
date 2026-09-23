@@ -17,6 +17,12 @@ class FoxessH1Grid(FoxessComponent):
     load_power = integer(31016, signed=True, unit="W")
     ct_meter_power = integer(31014, signed=True, unit="W")
 
+    # EPS (Emergency Power Supply) telemetry
+    eps_voltage = gauge(31010, 0.1, signed=False, unit="V")
+    eps_current = gauge(31011, 0.1, signed=True, unit="A")
+    eps_power = integer(31012, signed=True, unit="W")
+    eps_frequency = gauge(31013, 0.01, signed=False, unit="Hz")
+
     @property
     def grid_import_power(self) -> float:
         """Instantaneous power imported from the grid in Watts."""

@@ -15,6 +15,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    EntityCategory,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -29,6 +30,15 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import FoxessConfigEntry
 from .const import CONF_MAPPINGS
 from .coordinator import FoxessDataUpdateCoordinator
+
+
+def format_version(val: Any) -> str | None:
+    """Format numeric firmware version into decimal string (e.g. 133 -> 1.33)."""
+    if val is None:
+        return None
+    if isinstance(val, int):
+        return f"{val // 100}.{val % 100:02d}"
+    return str(val)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -178,6 +188,24 @@ BASE_SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         value_fn=lambda dev: str(dev.inverter.state) if dev.inverter.state is not None else None,
     ),
+    FoxessSensorDescription(
+        key="master_version",
+        name="Master Firmware Version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: format_version(getattr(dev.inverter, "master_version", None)),
+    ),
+    FoxessSensorDescription(
+        key="slave_version",
+        name="Slave Firmware Version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: format_version(getattr(dev.inverter, "slave_version", None)),
+    ),
+    FoxessSensorDescription(
+        key="manager_version",
+        name="Manager Firmware Version",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda dev: format_version(getattr(dev.inverter, "manager_version", None)),
+    ),
 )
 
 # Extended MPPT sensors (PV3 and PV4 on 4-string inverters like KH)
@@ -321,6 +349,14 @@ SINGLE_PHASE_GRID_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         value_fn=lambda dev: getattr(dev.grid, "ct_meter_power", None),
     ),
     FoxessSensorDescription(
+        key="net_grid_power",
+        name="Net Grid Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "ct_meter_power", None),
+    ),
+    FoxessSensorDescription(
         key="grid_import_power",
         name="Grid Import Power",
         device_class=SensorDeviceClass.POWER,
@@ -420,6 +456,111 @@ THREE_PHASE_GRID_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         value_fn=lambda dev: getattr(dev.grid, "grid_power_total", None),
     ),
+    FoxessSensorDescription(
+        key="net_grid_power",
+        name="Net Grid Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "grid_power_total", None),
+    ),
+)
+
+# Single-phase EPS sensors (KH, H1)
+SINGLE_PHASE_EPS_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
+    FoxessSensorDescription(
+        key="eps_voltage",
+        name="EPS Voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        value_fn=lambda dev: getattr(dev.grid, "eps_voltage", None),
+    ),
+    FoxessSensorDescription(
+        key="eps_current",
+        name="EPS Current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        value_fn=lambda dev: getattr(dev.grid, "eps_current", None),
+    ),
+    FoxessSensorDescription(
+        key="eps_power",
+        name="EPS Power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "eps_power", None),
+    ),
+    FoxessSensorDescription(
+        key="eps_frequency",
+        name="EPS Frequency",
+        device_class=SensorDeviceClass.FREQUENCY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfFrequency.HERTZ,
+        value_fn=lambda dev: getattr(dev.grid, "eps_frequency", None),
+    ),
+)
+
+# Three-phase EPS sensors (H3)
+THREE_PHASE_EPS_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
+    FoxessSensorDescription(
+        key="eps_power_r",
+        name="EPS Power Phase R",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "eps_power_r", None),
+    ),
+    FoxessSensorDescription(
+        key="eps_power_s",
+        name="EPS Power Phase S",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "eps_power_s", None),
+    ),
+    FoxessSensorDescription(
+        key="eps_power_t",
+        name="EPS Power Phase T",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "eps_power_t", None),
+    ),
+    FoxessSensorDescription(
+        key="eps_power_total",
+        name="EPS Power Total",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda dev: getattr(dev.grid, "eps_power_total", None),
+    ),
+    FoxessSensorDescription(
+        key="eps_frequency",
+        name="EPS Frequency",
+        device_class=SensorDeviceClass.FREQUENCY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfFrequency.HERTZ,
+        value_fn=lambda dev: getattr(dev.grid, "eps_frequency", None),
+    ),
+)
+
+CT2_SENSOR_DESCRIPTION = FoxessSensorDescription(
+    key="ct2_power",
+    name="CT2 Meter Power",
+    device_class=SensorDeviceClass.POWER,
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement=UnitOfPower.WATT,
+    value_fn=lambda dev: getattr(dev.grid, "ct2_power", None),
+)
+
+EPS_REACTIVE_POWER_DESCRIPTION = FoxessSensorDescription(
+    key="eps_reactive_power",
+    name="EPS Reactive Power",
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement="var",
+    value_fn=lambda dev: getattr(dev.grid, "eps_reactive_power", None),
 )
 
 
@@ -480,11 +621,19 @@ async def async_setup_entry(
     if hasattr(device.pv, "pv5_power"):
         descriptions.extend(PV5_PV6_DESCRIPTIONS)
 
-    # 2. Check for three-phase vs single-phase grid metering
+    # 3. Check for three-phase vs single-phase grid metering and EPS capabilities
     if hasattr(device.grid, "voltage_r"):
         descriptions.extend(THREE_PHASE_GRID_DESCRIPTIONS)
+        if hasattr(device.grid, "eps_power_total"):
+            descriptions.extend(THREE_PHASE_EPS_DESCRIPTIONS)
     elif hasattr(device.grid, "voltage"):
         descriptions.extend(SINGLE_PHASE_GRID_DESCRIPTIONS)
+        if hasattr(device.grid, "eps_power"):
+            descriptions.extend(SINGLE_PHASE_EPS_DESCRIPTIONS)
+        if hasattr(device.grid, "eps_reactive_power"):
+            descriptions.append(EPS_REACTIVE_POWER_DESCRIPTION)
+        if hasattr(device.grid, "ct2_power"):
+            descriptions.append(CT2_SENSOR_DESCRIPTION)
 
     entities: list[SensorEntity] = []
     for description in descriptions:

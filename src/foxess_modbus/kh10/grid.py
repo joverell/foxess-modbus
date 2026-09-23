@@ -16,6 +16,13 @@ class FoxessKH10Grid(FoxessComponent):
     frequency = gauge(31009, 0.01, signed=False, unit="Hz")
     load_power = gauge(31016, 1.0, signed=True, unit="W")
 
+    # EPS (Emergency Power Supply) telemetry
+    eps_voltage = gauge(31010, 0.1, signed=False, unit="V")
+    eps_current = gauge(31011, 0.1, signed=True, unit="A")
+    eps_power = gauge(31012, 1.0, signed=True, unit="W")
+    eps_frequency = gauge(31013, 0.01, signed=False, unit="Hz")
+    eps_reactive_power = gauge(31014, 1.0, signed=True, unit="var")
+
     # 32-bit signed CT meter power in Watts (register 39168=high word, 39169=low word)
     # Positive = export to grid, Negative = import from grid
     ct_meter_power = int32(39168, unit="W")

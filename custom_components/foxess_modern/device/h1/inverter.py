@@ -15,6 +15,10 @@ class FoxessH1InverterState(FoxessComponent):
     ambient_temp = gauge(31019, 0.1, signed=True, unit="°C")
     raw_state = integer(31027, signed=False)
 
+    master_version = integer(30016, signed=False)
+    slave_version = integer(30017, signed=False)
+    manager_version = integer(30018, signed=False)
+
     @property
     def state(self) -> InverterState:
         """Inverter operating status mapped to InverterState enum."""

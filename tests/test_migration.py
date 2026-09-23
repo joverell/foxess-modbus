@@ -138,6 +138,7 @@ class MockSensorEntityDescription:
     suggested_display_precision: Any = None
     name: str | None = None
     options: Any = None
+    entity_category: Any = None
 
 
 sys.modules["homeassistant.components.sensor"].SensorEntity = MockSensorEntity

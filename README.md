@@ -29,6 +29,10 @@ Built specifically against [`modbus-connection`](https://home-assistant-libs.git
 - **Backend-Neutral**: Operates on `modbus-connection`, supporting both `tmodbus` and `pymodbus` seamlessly.
 - **Inverter Microcontroller Protection**: Automatically groups and limits register reads (`max_span = 32`) to prevent the FoxESS AUX microcontroller UART FIFO buffer from overflowing and stalling.
 - **Shared Gateway Friendly**: Designed to operate with Home Assistant's `async_get_unit` connection broker. Multiple integrations and meters (e.g. Eastron, heat pumps) can share the same physical RS-485 bridge without bus collisions.
+- **Configurable Polling Interval**: User-selectable scan rate (5s, 10s, 15s, 30s, 60s) configured directly in Options.
+- **First-Class Predbat Automation**: Native signed net grid power sensor (+export, -import) and dedicated services for force charging, force discharging, clearing overrides, and setting work modes using remote active power registers to avoid solar curtailment.
+- **Dynamic Power Scaling**: Scales power limits dynamically up to 30,000 W for commercial H3-Pro systems.
+- **Multi-Model EPS Telemetry**: Real-time backup power, voltage, current, and frequency monitoring across single-phase and three-phase inverters.
 - **Strongly Typed**: Registers and coils map to typed Python properties with automatic endianness and scale factor decoding.
 - **Unit Tested**: Fully tested with mock in-memory Modbus backends.
 
@@ -38,10 +42,10 @@ Built specifically against [`modbus-connection`](https://home-assistant-libs.git
 
 | Series | Models | Strings / Trackers | Interface | Modbus Type | Register Set |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **H3-Pro Series** | H3-Pro-15.0 to H3-Pro-30.0 | **6 Strings** (PV1–PV6 across 3 MPPTs) | RS485 / LAN | Modbus TCP / RTU | Holding Registers (Commercial) |
-| **KH Series** | KH7, KH8, KH9, KH10, KH10.5 | **4 Strings** (PV1–PV4 across 4 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers (1.33+) |
-| **H3 / AC3 Series** | H3-5.0 to H3-12.0, AC3, AIO-H3 | **2 Strings** (PV1–PV2 across 2 MPPTs) | RS485 / LAN | Modbus TCP / RTU | Holding Registers (Three-Phase) |
-| **H1 / AC1 Series** | H1-3.0 to H1-6.0, AC1, AIO-H1 | **2 Strings** (PV1–PV2 across 2 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers |
+| **H3-Pro Series** | H3-Pro-15.0 to H3-Pro-30.0 | **6 Strings** (PV1-PV6 across 3 MPPTs) | RS485 / LAN | Modbus TCP / RTU | Holding Registers (Commercial) |
+| **KH Series** | KH7, KH8, KH9, KH10, KH10.5 | **4 Strings** (PV1-PV4 across 4 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers (1.33+) |
+| **H3 / AC3 Series** | H3-5.0 to H3-12.0, AC3, AIO-H3 | **2 Strings** (PV1-PV2 across 2 MPPTs) | RS485 / LAN | Modbus TCP / RTU | Holding Registers (Three-Phase) |
+| **H1 / AC1 Series** | H1-3.0 to H1-6.0, AC1, AIO-H1 | **2 Strings** (PV1-PV2 across 2 MPPTs) | AUX / LAN | Modbus TCP / RTU | Holding Registers |
 
 ---
 
@@ -64,21 +68,11 @@ Copy `custom_components/foxess_modern` into your Home Assistant `<config>/custom
 
 ---
 
-## Migrating from Legacy `foxess_modbus`
-
-Transitioning from Nathan Marlor's original `foxess_modbus` integration to `foxess_modern` is fully supported with **zero data loss**:
-
-- **Keep Long-Term Statistics**: Home Assistant tracks history by `entity_id`. `foxess_modern` provides an automated **Smart Sensor Mapping Wizard** that matches your existing legacy entity IDs so all historical graphs and Energy Dashboard metrics continue seamlessly.
-- **Conflict Prevention**: Disable (do not delete yet) your existing `foxess_modbus` entry in **Settings > Devices & Services** before adding `foxess_modern` to ensure port 502 on your RS-485 bridge is released.
-- **Step-by-Step Instructions**: See our dedicated **[Migration Guide](docs/MIGRATION_GUIDE.md)** for detailed walkthroughs, credit acknowledgements, and troubleshooting steps.
-
----
-
 ## Home Assistant Energy Dashboard Setup
 
 `foxess_modern` automatically creates native cumulative energy entities (measured in **kWh** with `device_class: energy` and `state_class: total_increasing`). These sensors persist across Home Assistant restarts and are directly selectable in Home Assistant's built-in **Energy Dashboard** without needing to manually configure Riemann sum integral helpers.
 
-Navigate to **Settings → Dashboards → Energy** and configure the fields as follows:
+Navigate to **Settings > Dashboards > Energy** and configure the fields as follows:
 
 | Energy Dashboard Category | Recommended Entity | Description |
 | :--- | :--- | :--- |
@@ -94,49 +88,14 @@ Navigate to **Settings → Dashboards → Energy** and configure the fields as f
 
 ---
 
-## Hardware Wiring & Setup Guide
+## Documentation & Detailed Guides
 
-FoxESS inverters communicate over standard half-duplex RS-485 Modbus RTU. To connect the inverter to Home Assistant, an RS-485 to Ethernet/WiFi bridge (e.g. Waveshare, Elfin EW11, USR-TCP232) or a direct USB RS-485 dongle is required.
+To maintain a clean, user-focused overview on the front page, technical implementation details and wiring references have been organized into dedicated documentation files:
 
-> [!TIP]
-> 📖 **Comprehensive Field Guide Available:** For step-by-step Waveshare web GUI configuration, Wi-Fi Faraday cage mitigations, UDP fallback, and the complete two-tier power-cycle recovery guide, see our dedicated **[Hardware Setup & Field Observations Guide](docs/HARDWARE_SETUP.md)**.
-
-### 1. Inverter RJ45 Port Pinouts
-
-Connect twisted-pair wiring (such as standard Cat5e/Cat6) from your RS-485 bridge to the inverter's communication port:
-
-| Inverter Series | Recommended Port | Pin 1 | Pin 2 | Pin 3 / 7 | Role | Inverter Unit ID |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **KH Series** (Single-Phase Hybrid) | **AUX** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | **Slave** (Passive) | **247** |
-| **H1 / AC1 Series** (Single-Phase) | **COM** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | **Slave** (Passive) | **247** |
-| **H3 / AC3 Series** (Three-Phase) | **RS485** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | **Slave** (Passive) | **247** |
-| **H3-Pro Series** (High Power) | **RS485 / COM** | **RS-485 A** (Data+) | **RS-485 B** (Data-) | **GND** | **Slave** (Passive) | **247** |
-
-```text
-RJ45 Connector (Pin 1 on far left, locking tab facing downwards/away):
- _________________________________________
-|  1  |  2  |  3  |  4  |  5  |  6  |  7  |  8  |
-|  A  |  B  | GND |  -  |  -  |  -  | GND |  -  |
-|_____|_____|_____|_____|_____|_____|_____|_____|
-```
-
-> [!CAUTION]
-> **Do not connect your Home Assistant bridge to the METER port.**
-> On FoxESS inverters, the **METER** port treats the inverter as the **Hardware Master** actively polling an external CT meter (DDSU666/SDM230). Connecting an active polling gateway here creates dual-master electrical signal collisions on the wire. Always connect Home Assistant to the **AUX** (or **COM**) port, where the inverter acts as a passive **Slave on Unit ID 247**.
-
-### 2. RS-485 Bridge Settings
-
-Configure your serial-to-network bridge (e.g. Waveshare, Elfin, USR) with these parameters:
-
-* **Protocol / Data Transfer Mode:** `Modbus TCP <=> Modbus RTU` *(essential for CRC calculation)*
-* **Local Port:** `502`
-* **Baud Rate:** `9600` *(standard for AUX/COM; certain LAN firmware builds use `115200`)*
-* **Data Bits:** `8` | **Parity:** `None` | **Stop Bits:** `1`
-* **Inverter Slave / Unit ID:** `247` *(FoxESS factory default; inspectable via LCD screen)*
-
-### 3. Shared Gateway Friendly (`modbus-connection`)
-
-Unlike legacy integrations that lock the TCP socket exclusively, `foxess_modern` uses Home Assistant's `async_get_unit` connection broker. Multiple integrations (e.g. an Eastron SDM630 meter on Unit 1 and the FoxESS inverter on Unit 247) can share the same physical RS-485 bridge without port contention or packet collisions.
+* **[Hardware Setup & Field Observations Guide](docs/HARDWARE_SETUP.md)**: Detailed RJ45 and 16-pin connector pinouts, RS-485 bridge configuration (Waveshare, USR, Elfin), Wi-Fi Faraday cage mitigations, UDP fallback, and the complete two-tier power-cycle recovery protocol.
+* **[Predbat Integration Guide](docs/PREDBAT_INTEGRATION.md)**: Drop-in `apps.yaml` configuration, signed native net grid power explanation, service automation triggers, and details on preventing solar curtailment via remote active power control.
+* **[Modbus Register Map Reference](docs/MODBUS_REGISTERS.md)**: Comprehensive multi-family register reference across KH, H1/AC1, and H3/H3-Pro models, including telemetry, EPS, and holding registers.
+* **[Migration Guide from Legacy foxess_modbus](docs/MIGRATION_GUIDE.md)**: Step-by-step instructions for transitioning from Nathan Marlor's integration with zero data loss and automated entity mapping.
 
 ---
 
@@ -199,47 +158,6 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
-
----
-
-## Register Map Reference (KH10 Holding Registers)
-
-| Subsystem | Register | Size / Type | Scale | Unit | Description |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **PV** | `39070` | 16-bit uint | 0.1 | V | PV1 Voltage |
-| | `39071` | 16-bit uint | 0.01 | A | PV1 Current |
-| | `39279-39280` | 32-bit uint | 1.0 | W | PV1 Power |
-| | `39072` | 16-bit uint | 0.1 | V | PV2 Voltage |
-| | `39073` | 16-bit uint | 0.01 | A | PV2 Current |
-| | `39281-39282` | 32-bit uint | 1.0 | W | PV2 Power |
-| | `39074` | 16-bit uint | 0.1 | V | PV3 Voltage |
-| | `39075` | 16-bit uint | 0.01 | A | PV3 Current |
-| | `39283-39284` | 32-bit uint | 1.0 | W | PV3 Power |
-| | `39076` | 16-bit uint | 0.1 | V | PV4 Voltage |
-| | `39077` | 16-bit uint | 0.01 | A | PV4 Current |
-| | `39285-39286` | 32-bit uint | 1.0 | W | PV4 Power |
-| **Grid** | `31006` | 16-bit uint | 0.1 | V | Grid Voltage |
-| | `31007` | 16-bit uint | 0.1 | A | Inverter Current |
-| | `31008` | 16-bit int | 1.0 | W | Inverter Power |
-| | `31009` | 16-bit uint | 0.01 | Hz | Grid Frequency |
-| | `31016` | 16-bit int | 1.0 | W | House Load Power |
-| | `39168-39169` | 32-bit int | 1.0 | W | Grid CT Active Power (+export, -import) |
-| **Battery** | `31020` | 16-bit uint | 0.1 | V | Battery Voltage |
-| | `31021` | 16-bit int | 0.1 | A | Battery Current |
-| | `31022` | 16-bit int | 1.0 | W | Battery Power (+discharge, -charge) |
-| | `31024` | 16-bit uint | 1.0 | % | Battery State of Charge (SoC) |
-| | `31023` | 16-bit int | 0.1 | °C | Battery Temperature |
-| | `31025` | 16-bit uint | 0.1 | A | BMS Max Charge Rate |
-| | `31026` | 16-bit uint | 0.1 | A | BMS Max Discharge Rate |
-| **Inverter** | `31018` | 16-bit int | 0.1 | °C | Inverter Heatsink Temperature |
-| | `31019` | 16-bit int | 0.1 | °C | Ambient Temperature |
-| | `31027` | 16-bit uint | 1.0 | enum | Inverter State (2=On-Grid) |
-| **Control** | `41000` | 16-bit uint | 1.0 | enum | Work Mode (0=Self Use, 1=Feed-in, 2=Backup) |
-| | `41009` | 16-bit uint | 1.0 | % | Min SoC |
-| | `41010` | 16-bit uint | 1.0 | % | Max SoC |
-| | `44000` | 16-bit uint | 1.0 | bool | Remote Active Power Override Enable |
-| | `44001` | 16-bit uint | 1.0 | s | Remote Timeout (watchdog) |
-| | `44002` | 16-bit int | 1.0 | W | Remote Active Power (-charge, +discharge) |
 
 ---
 

@@ -43,8 +43,9 @@
     "step": {
       "init": {
         "title": "FoxESS Modern Options",
-        "description": "Map FoxESS Modern sensors to legacy entity IDs to preserve history and automations.",
+        "description": "Configure polling interval and map FoxESS Modern sensors to legacy entity IDs.",
         "data": {
+          "scan_interval": "Readings Polling Interval (seconds)",
           "battery_soc": "Battery SoC Sensor",
           "pv_power_total": "Total PV Power Sensor",
           "pv1_power": "PV1 String Power Sensor",

@@ -1,0 +1,101 @@
+set_force_charge:
+  name: Set Force Charge
+  description: Command the FoxESS inverter to charge the battery from the grid at a target power while preserving solar self-consumption.
+  fields:
+    power:
+      name: Charge Power
+      description: Target charging power in Watts.
+      required: true
+      default: 5000
+      selector:
+        number:
+          min: 0
+          max: 30000
+          step: 100
+          unit_of_measurement: W
+          mode: box
+    max_soc:
+      name: Target Max SoC
+      description: Target battery state of charge percentage to stop charging.
+      required: false
+      default: 100
+      selector:
+        number:
+          min: 10
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+    duration:
+      name: Duration
+      description: Watchdog timer in seconds after which the inverter automatically returns to normal operation.
+      required: false
+      default: 3600
+      selector:
+        number:
+          min: 60
+          max: 86400
+          step: 60
+          unit_of_measurement: s
+          mode: box
+
+set_force_discharge:
+  name: Set Force Discharge
+  description: Command the FoxESS inverter to discharge the battery to the grid at a target power.
+  fields:
+    power:
+      name: Discharge Power
+      description: Target discharging power in Watts.
+      required: true
+      default: 5000
+      selector:
+        number:
+          min: 0
+          max: 30000
+          step: 100
+          unit_of_measurement: W
+          mode: box
+    min_soc:
+      name: Minimum SoC
+      description: Battery reserve percentage below which discharging will stop.
+      required: false
+      default: 10
+      selector:
+        number:
+          min: 10
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+          mode: slider
+    duration:
+      name: Duration
+      description: Watchdog timer in seconds after which the inverter automatically returns to normal operation.
+      required: false
+      default: 3600
+      selector:
+        number:
+          min: 60
+          max: 86400
+          step: 60
+          unit_of_measurement: s
+          mode: box
+
+clear_overrides:
+  name: Clear Overrides
+  description: Cancel any active force charge or discharge overrides and return the inverter to normal Self Use operation.
+
+set_work_mode:
+  name: Set Work Mode
+  description: Set the global inverter operating mode.
+  fields:
+    work_mode:
+      name: Work Mode
+      description: Desired inverter work mode.
+      required: true
+      default: "Self Use"
+      selector:
+        select:
+          options:
+            - "Self Use"
+            - "Feed-in First"
+            - "Back-up"

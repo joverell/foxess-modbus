@@ -20,15 +20,18 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
+    ALLOWED_SCAN_INTERVALS,
     CONF_HOST,
     CONF_MAPPINGS,
     CONF_MIGRATE,
     CONF_MODEL,
     CONF_PORT,
+    CONF_SCAN_INTERVAL,
     CONF_UNIT_ID,
     DEFAULT_CREATE_NEW,
     DEFAULT_MODEL,
     DEFAULT_PORT,
+    DEFAULT_SCAN_INTERVAL,
     DEFAULT_UNIT_ID,
     DOMAIN,
     LEGACY_DOMAIN,
@@ -221,12 +224,21 @@ class FoxessModernOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage FoxESS Modern options."""
+        current_scan_interval = self._config_entry.options.get(
+            CONF_SCAN_INTERVAL,
+            self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        )
+
         if user_input is not None:
+            scan_interval = user_input.get(CONF_SCAN_INTERVAL, current_scan_interval)
             mappings = {
                 k: v for k, v in user_input.items()
-                if v and v != DEFAULT_CREATE_NEW
+                if k != CONF_SCAN_INTERVAL and v and v != DEFAULT_CREATE_NEW
             }
-            return self.async_create_entry(title="", data={CONF_MAPPINGS: mappings})
+            return self.async_create_entry(
+                title="",
+                data={CONF_MAPPINGS: mappings, CONF_SCAN_INTERVAL: scan_interval},
+            )
 
         entity_reg = er.async_get(self.hass)
         matches = find_smart_matches(entity_reg)
@@ -234,7 +246,11 @@ class FoxessModernOptionsFlow(OptionsFlow):
             CONF_MAPPINGS, self._config_entry.data.get(CONF_MAPPINGS, {})
         )
 
-        schema_dict: dict[Any, Any] = {}
+        schema_dict: dict[Any, Any] = {
+            vol.Optional(CONF_SCAN_INTERVAL, default=current_scan_interval): vol.In(
+                ALLOWED_SCAN_INTERVALS
+            )
+        }
         for key, _label, _platform in MIGRATABLE_KEYS:
             options, smart_default = matches[key]
             current_val = current_mappings.get(key, smart_default)
