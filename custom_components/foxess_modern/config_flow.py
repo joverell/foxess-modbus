@@ -227,11 +227,6 @@ class FoxessModernConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                if user_input.get(CONF_MIGRATE):
-                    self._user_input = dict(user_input)
-                    self._title = info["title"]
-                    return await self.async_step_migration_mapping()
-
                 return self.async_create_entry(title=info["title"], data=user_input)
 
         has_legacy = bool(self.hass.config_entries.async_entries(LEGACY_DOMAIN))
