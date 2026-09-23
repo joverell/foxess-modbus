@@ -352,3 +352,32 @@ def test_dynamic_migratable_keys_by_model():
     assert "pv4_power" in h3_pro_keys
     assert "pv5_power" in h3_pro_keys
     assert "pv6_power" in h3_pro_keys
+
+
+def test_adopt_legacy_entity_id():
+    """Verify adopt_legacy_entity_id automatically discovers and adopts legacy entities."""
+    from custom_components.foxess_modern.migration import adopt_legacy_entity_id
+
+    # Create mock registry with mock entities
+    reg = MagicMock()
+    entry1 = MagicMock(platform="foxess_modbus", domain="sensor", entity_id="sensor.ambtemp", unique_id="foxess_modbus_ambtemp")
+    entry2 = MagicMock(platform="foxess_modbus", domain="sensor", entity_id="sensor.rvolt", unique_id="foxess_modbus_rvolt")
+    entry3 = MagicMock(platform="foxess_modbus", domain="number", entity_id="number.min_soc", unique_id="foxess_modbus_min_soc")
+    reg.entities = {e.entity_id: e for e in [entry1, entry2, entry3]}
+    reg.async_get = lambda eid: reg.entities.get(eid)
+
+    # 1. Automatic lookup via alias: ambient_temperature -> sensor.ambtemp
+    adopted_amb = adopt_legacy_entity_id(reg, key="ambient_temperature", domain="sensor")
+    assert adopted_amb == "ambtemp"
+    reg.async_remove.assert_called_with("sensor.ambtemp")
+
+    # 2. Automatic lookup via alias: grid_voltage -> sensor.rvolt
+    adopted_volt = adopt_legacy_entity_id(reg, key="grid_voltage", domain="sensor")
+    assert adopted_volt == "rvolt"
+    reg.async_remove.assert_called_with("sensor.rvolt")
+
+    # 3. Explicit mapped_id override
+    adopted_soc = adopt_legacy_entity_id(reg, key="min_soc", domain="number", explicit_mapped_id="number.min_soc")
+    assert adopted_soc == "min_soc"
+    reg.async_remove.assert_called_with("number.min_soc")
+

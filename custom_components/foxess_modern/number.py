@@ -12,8 +12,9 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import FoxessConfigEntry
-from .const import CONF_MAPPINGS, LEGACY_DOMAIN
+from .const import CONF_MAPPINGS
 from .coordinator import FoxessDataUpdateCoordinator
+from .migration import adopt_legacy_entity_id
 
 
 async def async_setup_entry(
@@ -29,18 +30,29 @@ async def async_setup_entry(
         CONF_MAPPINGS, entry.data.get(CONF_MAPPINGS, {})
     )
     entity_reg = er.async_get(hass)
-    min_soc_mapped = mappings.get("min_soc")
-    min_soc_obj_id = None
-    if min_soc_mapped:
-        if old_entry := entity_reg.async_get(min_soc_mapped):
-            if old_entry.platform == LEGACY_DOMAIN:
-                entity_reg.async_remove(min_soc_mapped)
-        min_soc_obj_id = min_soc_mapped.split(".", 1)[-1]
+    min_soc_obj_id = adopt_legacy_entity_id(
+        entity_reg,
+        key="min_soc",
+        domain="number",
+        explicit_mapped_id=mappings.get("min_soc"),
+    )
+    force_charge_obj_id = adopt_legacy_entity_id(
+        entity_reg,
+        key="force_charge_power",
+        domain="number",
+        explicit_mapped_id=mappings.get("force_charge_power"),
+    )
+    force_discharge_obj_id = adopt_legacy_entity_id(
+        entity_reg,
+        key="force_discharge_power",
+        domain="number",
+        explicit_mapped_id=mappings.get("force_discharge_power"),
+    )
 
     async_add_entities([
         FoxessMinSocNumber(coordinator, device, serial, suggested_object_id=min_soc_obj_id),
-        FoxessForceChargePowerNumber(coordinator, device, serial),
-        FoxessForceDischargePowerNumber(coordinator, device, serial),
+        FoxessForceChargePowerNumber(coordinator, device, serial, suggested_object_id=force_charge_obj_id),
+        FoxessForceDischargePowerNumber(coordinator, device, serial, suggested_object_id=force_discharge_obj_id),
     ])
 
 
@@ -108,7 +120,13 @@ class FoxessForceChargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordinator
     _attr_device_class = NumberDeviceClass.POWER
     _attr_mode = NumberMode.BOX
 
-    def __init__(self, coordinator: FoxessDataUpdateCoordinator, device: Any, serial: str) -> None:
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        suggested_object_id: str | None = None,
+    ) -> None:
         """Initialize the number entity."""
         super().__init__(coordinator)
         self._device = device
@@ -117,6 +135,8 @@ class FoxessForceChargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordinator
         self._attr_device_info = coordinator.device_info
         self._attr_native_max_value = get_max_inverter_power(device)
         self._target_power: float = 5000.0
+        if suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float:
@@ -137,7 +157,13 @@ class FoxessForceDischargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordina
     _attr_device_class = NumberDeviceClass.POWER
     _attr_mode = NumberMode.BOX
 
-    def __init__(self, coordinator: FoxessDataUpdateCoordinator, device: Any, serial: str) -> None:
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        suggested_object_id: str | None = None,
+    ) -> None:
         """Initialize the number entity."""
         super().__init__(coordinator)
         self._device = device
@@ -146,6 +172,8 @@ class FoxessForceDischargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordina
         self._attr_device_info = coordinator.device_info
         self._attr_native_max_value = get_max_inverter_power(device)
         self._target_power: float = 5000.0
+        if suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float:

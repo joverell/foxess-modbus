@@ -31,6 +31,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import FoxessConfigEntry
 from .const import CONF_MAPPINGS, LEGACY_DOMAIN
 from .coordinator import FoxessDataUpdateCoordinator
+from .migration import adopt_legacy_entity_id
 
 
 def format_version(val: Any) -> str | None:
@@ -640,12 +641,12 @@ async def async_setup_entry(
     entities: list[SensorEntity] = []
     for description in descriptions:
         mapped_id = mappings.get(description.key)
-        suggested_id = None
-        if mapped_id:
-            if old_entry := entity_reg.async_get(mapped_id):
-                if old_entry.platform == LEGACY_DOMAIN:
-                    entity_reg.async_remove(mapped_id)
-            suggested_id = mapped_id.split(".", 1)[-1]
+        suggested_id = adopt_legacy_entity_id(
+            entity_reg,
+            key=description.key,
+            domain="sensor",
+            explicit_mapped_id=mapped_id,
+        )
         entities.append(
             FoxessSensorEntity(
                 coordinator,
@@ -659,12 +660,12 @@ async def async_setup_entry(
     # 3. Add cumulative Energy Dashboard sensors (kWh)
     for key, name, power_fn in ENERGY_SENSOR_DESCRIPTIONS:
         mapped_id = mappings.get(key)
-        suggested_id = None
-        if mapped_id:
-            if old_entry := entity_reg.async_get(mapped_id):
-                if old_entry.platform == LEGACY_DOMAIN:
-                    entity_reg.async_remove(mapped_id)
-            suggested_id = mapped_id.split(".", 1)[-1]
+        suggested_id = adopt_legacy_entity_id(
+            entity_reg,
+            key=key,
+            domain="sensor",
+            explicit_mapped_id=mapped_id,
+        )
         entities.append(
             FoxessEnergySensor(
                 coordinator=coordinator,

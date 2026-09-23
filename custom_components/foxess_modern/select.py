@@ -11,9 +11,10 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import FoxessConfigEntry
-from .const import CONF_MAPPINGS, LEGACY_DOMAIN
+from .const import CONF_MAPPINGS
 from .coordinator import FoxessDataUpdateCoordinator
 from .device.const import WorkMode
+from .migration import adopt_legacy_entity_id
 
 _WORK_MODE_OPTIONS: dict[str, WorkMode] = {
     "Self Use": WorkMode.SELF_USE,
@@ -36,13 +37,12 @@ async def async_setup_entry(
         CONF_MAPPINGS, entry.data.get(CONF_MAPPINGS, {})
     )
     entity_reg = er.async_get(hass)
-    mapped_id = mappings.get("work_mode")
-    suggested_id = None
-    if mapped_id:
-        if old_entry := entity_reg.async_get(mapped_id):
-            if old_entry.platform == LEGACY_DOMAIN:
-                entity_reg.async_remove(mapped_id)
-        suggested_id = mapped_id.split(".", 1)[-1]
+    suggested_id = adopt_legacy_entity_id(
+        entity_reg,
+        key="work_mode",
+        domain="select",
+        explicit_mapped_id=mappings.get("work_mode"),
+    )
 
     async_add_entities([
         FoxessWorkModeSelect(coordinator, device, serial, suggested_object_id=suggested_id)
