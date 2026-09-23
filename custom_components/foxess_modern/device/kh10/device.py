@@ -9,7 +9,9 @@ from modbus_connection.model import Device, Raw, UpdateReport
 
 from ..const import WorkMode
 from .battery import FoxessKH10Battery
+from .bms import FoxessKH10BMS
 from .control import FoxessKH10Control
+from .energy import FoxessKH10Energy
 from .grid import FoxessKH10Grid
 from .inverter import FoxessKH10InverterState
 from .pv import FoxessKH10PV
@@ -39,11 +41,13 @@ class FoxessKH10Inverter(Device):
         # Sub-system components
         self.pv = FoxessKH10PV(unit)
         self.battery = FoxessKH10Battery(unit)
+        self.bms = FoxessKH10BMS(unit)
+        self.energy = FoxessKH10Energy(unit)
         self.grid = FoxessKH10Grid(unit)
         self.inverter = FoxessKH10InverterState(unit)
         self.control = FoxessKH10Control(unit)
 
-        self._readings: tuple[str, ...] = ("pv", "battery", "grid", "inverter")
+        self._readings: tuple[str, ...] = ("pv", "battery", "bms", "energy", "grid", "inverter")
         self._settings: tuple[str, ...] = ("control",)
 
     async def _async_setup(self) -> None:
@@ -81,6 +85,42 @@ class FoxessKH10Inverter(Device):
         if not 10 <= min_soc <= 100:
             raise ValueError(f"Min SOC must be between 10 and 100, got {min_soc}")
         await self.control.write("min_soc", min_soc)
+
+    async def async_set_max_soc(self, max_soc: int) -> None:
+        """Set the maximum battery state-of-charge percentage."""
+        if not 10 <= max_soc <= 100:
+            raise ValueError(f"Max SOC must be between 10 and 100, got {max_soc}")
+        await self.control.write("max_soc", max_soc)
+
+    async def async_set_min_soc_on_grid(self, min_soc_on_grid: int) -> None:
+        """Set the minimum battery state-of-charge percentage when grid is connected."""
+        if not 10 <= min_soc_on_grid <= 100:
+            raise ValueError(f"Min SOC on grid must be between 10 and 100, got {min_soc_on_grid}")
+        await self.control.write("min_soc_on_grid", min_soc_on_grid)
+
+    async def async_set_max_charge_current(self, current: float) -> None:
+        """Set maximum battery charge current in Amperes."""
+        if not 0.0 <= current <= 50.0:
+            raise ValueError(f"Max charge current must be between 0 and 50A, got {current}")
+        await self.control.write("max_charge_current", current)
+
+    async def async_set_max_discharge_current(self, current: float) -> None:
+        """Set maximum battery discharge current in Amperes."""
+        if not 0.0 <= current <= 50.0:
+            raise ValueError(f"Max discharge current must be between 0 and 50A, got {current}")
+        await self.control.write("max_discharge_current", current)
+
+    async def async_set_export_power_limit(self, power_w: int) -> None:
+        """Set maximum export power limit in Watts."""
+        if not 0 <= power_w <= 99999:
+            raise ValueError(f"Export power limit must be between 0 and 99999W, got {power_w}")
+        await self.control.write("export_power_limit", power_w)
+
+    async def async_set_import_power_limit(self, power_w: int) -> None:
+        """Set maximum import power limit in Watts."""
+        if not 0 <= power_w <= 99999:
+            raise ValueError(f"Import power limit must be between 0 and 99999W, got {power_w}")
+        await self.control.write("import_power_limit", power_w)
 
     async def async_set_force_charge(
         self,

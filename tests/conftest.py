@@ -145,6 +145,7 @@ class MockUnitOfTemperature:
 class MockNumberDeviceClass:
     BATTERY = "battery"
     POWER = "power"
+    CURRENT = "current"
 
 
 class MockSensorDeviceClass:
@@ -181,6 +182,7 @@ class MockSensorEntityDescription:
     name: str | None = None
     options: Any = None
     entity_category: Any = None
+    icon: str | None = None
 
 
 sys.modules["homeassistant.exceptions"].HomeAssistantError = MockHomeAssistantError

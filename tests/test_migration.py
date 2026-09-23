@@ -104,6 +104,7 @@ sys.modules["homeassistant.config_entries"].ConfigFlowResult = MagicMock
 class MockNumberDeviceClass:
     BATTERY = "battery"
     POWER = "power"
+    CURRENT = "current"
 
 
 class MockSensorDeviceClass:
@@ -139,6 +140,7 @@ class MockSensorEntityDescription:
     name: str | None = None
     options: Any = None
     entity_category: Any = None
+    icon: str | None = None
 
 
 sys.modules["homeassistant.components.sensor"].SensorEntity = MockSensorEntity
@@ -368,16 +370,16 @@ def test_adopt_legacy_entity_id():
 
     # 1. Automatic lookup via alias: ambient_temperature -> sensor.ambtemp
     adopted_amb = adopt_legacy_entity_id(reg, key="ambient_temperature", domain="sensor")
-    assert adopted_amb == "ambtemp"
+    assert adopted_amb == "sensor.ambtemp"
     reg.async_remove.assert_called_with("sensor.ambtemp")
 
     # 2. Automatic lookup via alias: grid_voltage -> sensor.rvolt
     adopted_volt = adopt_legacy_entity_id(reg, key="grid_voltage", domain="sensor")
-    assert adopted_volt == "rvolt"
+    assert adopted_volt == "sensor.rvolt"
     reg.async_remove.assert_called_with("sensor.rvolt")
 
     # 3. Explicit mapped_id override
     adopted_soc = adopt_legacy_entity_id(reg, key="min_soc", domain="number", explicit_mapped_id="number.min_soc")
-    assert adopted_soc == "min_soc"
+    assert adopted_soc == "number.min_soc"
     reg.async_remove.assert_called_with("number.min_soc")
 

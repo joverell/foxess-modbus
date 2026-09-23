@@ -37,15 +37,16 @@ async def async_setup_entry(
         CONF_MAPPINGS, entry.data.get(CONF_MAPPINGS, {})
     )
     entity_reg = er.async_get(hass)
-    suggested_id = adopt_legacy_entity_id(
+    target_id = adopt_legacy_entity_id(
         entity_reg,
         key="work_mode",
         domain="select",
+        serial=serial,
         explicit_mapped_id=mappings.get("work_mode"),
     )
 
     async_add_entities([
-        FoxessWorkModeSelect(coordinator, device, serial, suggested_object_id=suggested_id)
+        FoxessWorkModeSelect(coordinator, device, serial, target_entity_id=target_id)
     ])
 
 
@@ -59,6 +60,7 @@ class FoxessWorkModeSelect(CoordinatorEntity[FoxessDataUpdateCoordinator], Selec
         coordinator: FoxessDataUpdateCoordinator,
         device: Any,
         serial: str,
+        target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
     ) -> None:
         """Initialize the select entity."""
@@ -67,7 +69,13 @@ class FoxessWorkModeSelect(CoordinatorEntity[FoxessDataUpdateCoordinator], Selec
         self._attr_unique_id = f"{serial}_work_mode"
         self._attr_name = "Work Mode"
         self._attr_device_info = coordinator.device_info
-        if suggested_object_id:
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("select."):
+                raw_id = f"select.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
             self._attr_suggested_object_id = suggested_object_id
 
     @property

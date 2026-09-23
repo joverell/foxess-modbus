@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
-from homeassistant.const import UnitOfPower
+from homeassistant.const import UnitOfElectricCurrent, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -30,30 +30,108 @@ async def async_setup_entry(
         CONF_MAPPINGS, entry.data.get(CONF_MAPPINGS, {})
     )
     entity_reg = er.async_get(hass)
-    min_soc_obj_id = adopt_legacy_entity_id(
-        entity_reg,
-        key="min_soc",
-        domain="number",
-        explicit_mapped_id=mappings.get("min_soc"),
+
+    entities: list[NumberEntity] = []
+
+    def _get_target_id(key: str) -> str:
+        return adopt_legacy_entity_id(
+            entity_reg,
+            key=key,
+            domain="number",
+            serial=serial,
+            explicit_mapped_id=mappings.get(key),
+        )
+
+    # 1. Min SoC
+    if hasattr(device.control, "min_soc"):
+        entities.append(
+            FoxessMinSocNumber(
+                coordinator, device, serial, target_entity_id=_get_target_id("min_soc")
+            )
+        )
+
+    # 2. Max SoC
+    if hasattr(device.control, "max_soc"):
+        entities.append(
+            FoxessMaxSocNumber(
+                coordinator, device, serial, target_entity_id=_get_target_id("max_soc")
+            )
+        )
+
+    # 3. Min SoC On Grid
+    if hasattr(device.control, "min_soc_on_grid"):
+        entities.append(
+            FoxessMinSocOnGridNumber(
+                coordinator,
+                device,
+                serial,
+                target_entity_id=_get_target_id("min_soc_on_grid"),
+            )
+        )
+
+    # 4. Max Charge Current
+    if hasattr(device.control, "max_charge_current"):
+        entities.append(
+            FoxessMaxChargeCurrentNumber(
+                coordinator,
+                device,
+                serial,
+                target_entity_id=_get_target_id("max_charge_current"),
+            )
+        )
+
+    # 5. Max Discharge Current
+    if hasattr(device.control, "max_discharge_current"):
+        entities.append(
+            FoxessMaxDischargeCurrentNumber(
+                coordinator,
+                device,
+                serial,
+                target_entity_id=_get_target_id("max_discharge_current"),
+            )
+        )
+
+    # 6. Export Power Limit
+    if hasattr(device.control, "export_power_limit"):
+        entities.append(
+            FoxessExportPowerLimitNumber(
+                coordinator,
+                device,
+                serial,
+                target_entity_id=_get_target_id("export_power_limit"),
+            )
+        )
+
+    # 7. Import Power Limit
+    if hasattr(device.control, "import_power_limit"):
+        entities.append(
+            FoxessImportPowerLimitNumber(
+                coordinator,
+                device,
+                serial,
+                target_entity_id=_get_target_id("import_power_limit"),
+            )
+        )
+
+    # 8. Force Charge & Force Discharge Power
+    entities.append(
+        FoxessForceChargePowerNumber(
+            coordinator,
+            device,
+            serial,
+            target_entity_id=_get_target_id("force_charge_power"),
+        )
     )
-    force_charge_obj_id = adopt_legacy_entity_id(
-        entity_reg,
-        key="force_charge_power",
-        domain="number",
-        explicit_mapped_id=mappings.get("force_charge_power"),
-    )
-    force_discharge_obj_id = adopt_legacy_entity_id(
-        entity_reg,
-        key="force_discharge_power",
-        domain="number",
-        explicit_mapped_id=mappings.get("force_discharge_power"),
+    entities.append(
+        FoxessForceDischargePowerNumber(
+            coordinator,
+            device,
+            serial,
+            target_entity_id=_get_target_id("force_discharge_power"),
+        )
     )
 
-    async_add_entities([
-        FoxessMinSocNumber(coordinator, device, serial, suggested_object_id=min_soc_obj_id),
-        FoxessForceChargePowerNumber(coordinator, device, serial, suggested_object_id=force_charge_obj_id),
-        FoxessForceDischargePowerNumber(coordinator, device, serial, suggested_object_id=force_discharge_obj_id),
-    ])
+    async_add_entities(entities)
 
 
 class FoxessMinSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
@@ -71,6 +149,7 @@ class FoxessMinSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberE
         coordinator: FoxessDataUpdateCoordinator,
         device: Any,
         serial: str,
+        target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
     ) -> None:
         """Initialize the number entity."""
@@ -79,7 +158,13 @@ class FoxessMinSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberE
         self._attr_unique_id = f"{serial}_min_soc"
         self._attr_name = "Min SoC"
         self._attr_device_info = coordinator.device_info
-        if suggested_object_id:
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
             self._attr_suggested_object_id = suggested_object_id
 
     @property
@@ -91,6 +176,276 @@ class FoxessMinSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberE
     async def async_set_native_value(self, value: float) -> None:
         """Set the min SOC."""
         await self._device.async_set_min_soc(int(value))
+        await self.coordinator.async_request_refresh()
+
+
+class FoxessMaxSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+    """Number entity for setting Inverter Max SOC."""
+
+    _attr_native_min_value = 10.0
+    _attr_native_max_value = 100.0
+    _attr_native_step = 1.0
+    _attr_native_unit_of_measurement = "%"
+    _attr_device_class = NumberDeviceClass.BATTERY
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        target_entity_id: str | None = None,
+        suggested_object_id: str | None = None,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._device = device
+        self._attr_unique_id = f"{serial}_max_soc"
+        self._attr_name = "Max SoC"
+        self._attr_device_info = coordinator.device_info
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current max SOC."""
+        val = self._device.control.max_soc
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the max SOC."""
+        await self._device.async_set_max_soc(int(value))
+        await self.coordinator.async_request_refresh()
+
+
+class FoxessMinSocOnGridNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+    """Number entity for setting Inverter Min SOC on Grid."""
+
+    _attr_native_min_value = 10.0
+    _attr_native_max_value = 100.0
+    _attr_native_step = 1.0
+    _attr_native_unit_of_measurement = "%"
+    _attr_device_class = NumberDeviceClass.BATTERY
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        target_entity_id: str | None = None,
+        suggested_object_id: str | None = None,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._device = device
+        self._attr_unique_id = f"{serial}_min_soc_on_grid"
+        self._attr_name = "Min SoC (On Grid)"
+        self._attr_device_info = coordinator.device_info
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current min SOC on grid."""
+        val = self._device.control.min_soc_on_grid
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the min SOC on grid."""
+        await self._device.async_set_min_soc_on_grid(int(value))
+        await self.coordinator.async_request_refresh()
+
+
+class FoxessMaxChargeCurrentNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+    """Number entity for setting Max Charge Current."""
+
+    _attr_native_min_value = 0.0
+    _attr_native_max_value = 50.0
+    _attr_native_step = 0.1
+    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
+    _attr_device_class = NumberDeviceClass.CURRENT
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        target_entity_id: str | None = None,
+        suggested_object_id: str | None = None,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._device = device
+        self._attr_unique_id = f"{serial}_max_charge_current"
+        self._attr_name = "Max Charge Current"
+        self._attr_device_info = coordinator.device_info
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the max charge current."""
+        val = self._device.control.max_charge_current
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the max charge current."""
+        await self._device.async_set_max_charge_current(value)
+        await self.coordinator.async_request_refresh()
+
+
+class FoxessMaxDischargeCurrentNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+    """Number entity for setting Max Discharge Current."""
+
+    _attr_native_min_value = 0.0
+    _attr_native_max_value = 50.0
+    _attr_native_step = 0.1
+    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
+    _attr_device_class = NumberDeviceClass.CURRENT
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        target_entity_id: str | None = None,
+        suggested_object_id: str | None = None,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._device = device
+        self._attr_unique_id = f"{serial}_max_discharge_current"
+        self._attr_name = "Max Discharge Current"
+        self._attr_device_info = coordinator.device_info
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the max discharge current."""
+        val = self._device.control.max_discharge_current
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the max discharge current."""
+        await self._device.async_set_max_discharge_current(value)
+        await self.coordinator.async_request_refresh()
+
+
+class FoxessExportPowerLimitNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+    """Number entity for setting Export Power Limit."""
+
+    _attr_native_min_value = 0.0
+    _attr_native_max_value = 99999.0
+    _attr_native_step = 100.0
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_device_class = NumberDeviceClass.POWER
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        target_entity_id: str | None = None,
+        suggested_object_id: str | None = None,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._device = device
+        self._attr_unique_id = f"{serial}_export_power_limit"
+        self._attr_name = "Export Power Limit"
+        self._attr_device_info = coordinator.device_info
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the export power limit."""
+        val = self._device.control.export_power_limit
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the export power limit."""
+        await self._device.async_set_export_power_limit(int(value))
+        await self.coordinator.async_request_refresh()
+
+
+class FoxessImportPowerLimitNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
+    """Number entity for setting Import Power Limit."""
+
+    _attr_native_min_value = 0.0
+    _attr_native_max_value = 99999.0
+    _attr_native_step = 100.0
+    _attr_native_unit_of_measurement = UnitOfPower.WATT
+    _attr_device_class = NumberDeviceClass.POWER
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        target_entity_id: str | None = None,
+        suggested_object_id: str | None = None,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._device = device
+        self._attr_unique_id = f"{serial}_import_power_limit"
+        self._attr_name = "Import Power Limit"
+        self._attr_device_info = coordinator.device_info
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the import power limit."""
+        val = self._device.control.import_power_limit
+        return float(val) if val is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the import power limit."""
+        await self._device.async_set_import_power_limit(int(value))
         await self.coordinator.async_request_refresh()
 
 
@@ -125,6 +480,7 @@ class FoxessForceChargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordinator
         coordinator: FoxessDataUpdateCoordinator,
         device: Any,
         serial: str,
+        target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
     ) -> None:
         """Initialize the number entity."""
@@ -135,7 +491,13 @@ class FoxessForceChargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordinator
         self._attr_device_info = coordinator.device_info
         self._attr_native_max_value = get_max_inverter_power(device)
         self._target_power: float = 5000.0
-        if suggested_object_id:
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
             self._attr_suggested_object_id = suggested_object_id
 
     @property
@@ -162,6 +524,7 @@ class FoxessForceDischargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordina
         coordinator: FoxessDataUpdateCoordinator,
         device: Any,
         serial: str,
+        target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
     ) -> None:
         """Initialize the number entity."""
@@ -172,7 +535,13 @@ class FoxessForceDischargePowerNumber(CoordinatorEntity[FoxessDataUpdateCoordina
         self._attr_device_info = coordinator.device_info
         self._attr_native_max_value = get_max_inverter_power(device)
         self._target_power: float = 5000.0
-        if suggested_object_id:
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
             self._attr_suggested_object_id = suggested_object_id
 
     @property

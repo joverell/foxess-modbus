@@ -48,7 +48,7 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[None]):
             identifiers={(DOMAIN, str(self.entry.unique_id))},
             manufacturer="FoxESS",
             model=self.device.model,
-            name=f"FoxESS {self.device.model} ({self.entry.unique_id})",
+            name=f"FoxESS {self.device.model}",
         )
 
     async def _async_update_data(self) -> None:

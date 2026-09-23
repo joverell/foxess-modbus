@@ -68,7 +68,7 @@ def find_smart_matches(
         "pv4_power": ["pv4_power"],
         "pv5_power": ["pv5_power"],
         "pv6_power": ["pv6_power"],
-        "grid_ct_meter_power": ["feed_in_power", "grid_power", "meter_power", "ct_power"],
+        "grid_ct_meter_power": ["feed_in_power", "feed_in_2", "feed_in", "grid_power", "meter_power", "ct_power"],
         "house_load_power": ["load_power", "house_load", "consumption_power"],
         "grid_import_energy_total": [
             "grid_consumption_energy_total",
@@ -94,8 +94,16 @@ def find_smart_matches(
             "discharge_energy",
             "battery_discharge",
         ],
+        "pv1_energy_total": ["pv1_energy_total_2", "pv1_energy_total"],
+        "pv2_energy_total": ["pv2_energy_total_2", "pv2_energy_total"],
         "work_mode": ["work_mode", "inverter_mode"],
         "min_soc": ["min_soc"],
+        "max_soc": ["max_soc"],
+        "min_soc_on_grid": ["min_soc_on_grid"],
+        "max_charge_current": ["max_charge_current"],
+        "max_discharge_current": ["max_discharge_current"],
+        "export_power_limit": ["export_power_limit"],
+        "import_power_limit": ["import_power_limit"],
     }
 
     for key, _label, platform in target_keys:
@@ -103,12 +111,19 @@ def find_smart_matches(
             entity.entity_id
             for entity in entity_reg.entities.values()
             if entity.domain == platform
-            and (
-                entity.platform == LEGACY_DOMAIN
-                or "foxess" in entity.entity_id.lower()
-                or key in entity.entity_id.lower()
-            )
+            and entity.platform == LEGACY_DOMAIN
         ]
+        if not candidates:
+            candidates = [
+                entity.entity_id
+                for entity in entity_reg.entities.values()
+                if entity.domain == platform
+                and entity.platform != DOMAIN
+                and (
+                    "foxess" in entity.entity_id.lower()
+                    or key in entity.entity_id.lower()
+                )
+            ]
         candidates = sorted(set(candidates))
 
         smart_match = DEFAULT_CREATE_NEW
@@ -122,9 +137,22 @@ def find_smart_matches(
 
         # Match 2: check aliases if still not found
         if smart_match == DEFAULT_CREATE_NEW:
+            # First check exact suffix match across all aliases
             for alias in aliases.get(key, []):
                 for cand in candidates:
-                    if alias in cand.lower():
+                    cand_lower = cand.lower()
+                    if cand_lower.endswith(f"_{alias}") or cand_lower.endswith(f".{alias}"):
+                        smart_match = cand
+                        break
+                if smart_match != DEFAULT_CREATE_NEW:
+                    break
+
+        if smart_match == DEFAULT_CREATE_NEW:
+            # Second check substring match across aliases
+            for alias in aliases.get(key, []):
+                for cand in candidates:
+                    cand_lower = cand.lower()
+                    if alias in cand_lower:
                         smart_match = cand
                         break
                 if smart_match != DEFAULT_CREATE_NEW:

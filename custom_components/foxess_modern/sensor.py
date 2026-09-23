@@ -185,10 +185,24 @@ BASE_SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         value_fn=lambda dev: dev.inverter.inverter_temp,
     ),
     FoxessSensorDescription(
+        key="ambient_temperature",
+        name="Ambient Temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        value_fn=lambda dev: getattr(dev.inverter, "ambient_temp", None),
+    ),
+    FoxessSensorDescription(
         key="inverter_state",
         name="Inverter State",
         device_class=SensorDeviceClass.ENUM,
         value_fn=lambda dev: str(dev.inverter.state) if dev.inverter.state is not None else None,
+    ),
+    FoxessSensorDescription(
+        key="connection_status",
+        name="Connection Status",
+        icon="mdi:check-network-outline",
+        value_fn=lambda dev: "Connected" if getattr(getattr(dev, "modbus_unit", None), "connected", True) else "Disconnected",
     ),
     FoxessSensorDescription(
         key="master_version",
@@ -566,6 +580,173 @@ EPS_REACTIVE_POWER_DESCRIPTION = FoxessSensorDescription(
 )
 
 
+BMS_SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
+    FoxessSensorDescription(
+        key="bms_cell_temp_high",
+        name="BMS Cell Temp High",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        value_fn=lambda dev: getattr(getattr(dev, "bms", None), "bms_cell_temp_high", None),
+    ),
+    FoxessSensorDescription(
+        key="bms_cell_temp_low",
+        name="BMS Cell Temp Low",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        value_fn=lambda dev: getattr(getattr(dev, "bms", None), "bms_cell_temp_low", None),
+    ),
+    FoxessSensorDescription(
+        key="bms_cell_mv_high",
+        name="BMS Cell mV High",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="mV",
+        value_fn=lambda dev: getattr(getattr(dev, "bms", None), "bms_cell_mv_high", None),
+    ),
+    FoxessSensorDescription(
+        key="bms_cell_mv_low",
+        name="BMS Cell mV Low",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="mV",
+        value_fn=lambda dev: getattr(getattr(dev, "bms", None), "bms_cell_mv_low", None),
+    ),
+    FoxessSensorDescription(
+        key="battery_soh",
+        name="Battery SoH",
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="%",
+        value_fn=lambda dev: getattr(getattr(dev, "bms", None), "battery_soh", None),
+    ),
+    FoxessSensorDescription(
+        key="bms_kwh_remaining",
+        name="BMS kWh Remaining",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "bms", None), "bms_kwh_remaining", None),
+    ),
+)
+
+HARDWARE_ENERGY_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
+    FoxessSensorDescription(
+        key="solar_energy_total",
+        name="Solar Energy Total",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "solar_energy_total", None),
+    ),
+    FoxessSensorDescription(
+        key="solar_energy_today",
+        name="Solar Energy Today",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "solar_energy_today", None),
+    ),
+    FoxessSensorDescription(
+        key="battery_charge_energy_total",
+        name="Battery Charge Energy Total",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "battery_charge_energy_total", None),
+    ),
+    FoxessSensorDescription(
+        key="battery_charge_energy_today",
+        name="Battery Charge Energy Today",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "battery_charge_energy_today", None),
+    ),
+    FoxessSensorDescription(
+        key="battery_discharge_energy_total",
+        name="Battery Discharge Energy Total",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "battery_discharge_energy_total", None),
+    ),
+    FoxessSensorDescription(
+        key="battery_discharge_energy_today",
+        name="Battery Discharge Energy Today",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "battery_discharge_energy_today", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_export_energy_total",
+        name="Grid Export Energy Total",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "grid_export_energy_total", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_export_energy_today",
+        name="Grid Export Energy Today",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "grid_export_energy_today", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_import_energy_total",
+        name="Grid Import Energy Total",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "grid_import_energy_total", None),
+    ),
+    FoxessSensorDescription(
+        key="grid_import_energy_today",
+        name="Grid Import Energy Today",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "grid_import_energy_today", None),
+    ),
+    FoxessSensorDescription(
+        key="total_yield_total",
+        name="Total Yield Total",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "total_yield_total", None),
+    ),
+    FoxessSensorDescription(
+        key="total_yield_today",
+        name="Total Yield Today",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "total_yield_today", None),
+    ),
+    FoxessSensorDescription(
+        key="load_energy_total",
+        name="Load Energy Total",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "load_energy_total", None),
+    ),
+    FoxessSensorDescription(
+        key="load_energy_today",
+        name="Load Energy Today",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: getattr(getattr(dev, "energy", None), "load_energy_today", None),
+    ),
+)
+
+
 ENERGY_SENSOR_DESCRIPTIONS: tuple[tuple[str, str, Callable[[Any], float | None]], ...] = (
     (
         "pv_energy_total",
@@ -615,15 +796,19 @@ async def async_setup_entry(
 
     descriptions: list[FoxessSensorDescription] = list(BASE_SENSOR_DESCRIPTIONS)
 
-    # 1. Check for 4-string MPPT support (e.g. KH series)
+    # 1. Check for BMS detailed telemetry (e.g. KH series)
+    if hasattr(device, "bms"):
+        descriptions.extend(BMS_SENSOR_DESCRIPTIONS)
+
+    # 2. Check for 4-string MPPT support (e.g. KH series)
     if hasattr(device.pv, "pv3_power"):
         descriptions.extend(PV3_PV4_DESCRIPTIONS)
 
-    # 2. Check for 6-string MPPT support (e.g. H3-Pro series)
+    # 3. Check for 6-string MPPT support (e.g. H3-Pro series)
     if hasattr(device.pv, "pv5_power"):
         descriptions.extend(PV5_PV6_DESCRIPTIONS)
 
-    # 3. Check for three-phase vs single-phase grid metering and EPS capabilities
+    # 4. Check for three-phase vs single-phase grid metering and EPS capabilities
     if hasattr(device.grid, "voltage_r"):
         descriptions.extend(THREE_PHASE_GRID_DESCRIPTIONS)
         if hasattr(device.grid, "eps_power_total"):
@@ -637,14 +822,20 @@ async def async_setup_entry(
         if hasattr(device.grid, "ct2_power"):
             descriptions.append(CT2_SENSOR_DESCRIPTION)
 
+    # 5. Check for hardware cumulative energy counters (e.g. KH series)
+    has_hardware_energy = hasattr(device, "energy")
+    if has_hardware_energy:
+        descriptions.extend(HARDWARE_ENERGY_DESCRIPTIONS)
+
     entity_reg = er.async_get(hass)
     entities: list[SensorEntity] = []
     for description in descriptions:
         mapped_id = mappings.get(description.key)
-        suggested_id = adopt_legacy_entity_id(
+        target_id = adopt_legacy_entity_id(
             entity_reg,
             key=description.key,
             domain="sensor",
+            serial=serial,
             explicit_mapped_id=mapped_id,
         )
         entities.append(
@@ -653,30 +844,32 @@ async def async_setup_entry(
                 description,
                 device,
                 serial,
-                suggested_object_id=suggested_id,
+                target_entity_id=target_id,
             )
         )
 
-    # 3. Add cumulative Energy Dashboard sensors (kWh)
-    for key, name, power_fn in ENERGY_SENSOR_DESCRIPTIONS:
-        mapped_id = mappings.get(key)
-        suggested_id = adopt_legacy_entity_id(
-            entity_reg,
-            key=key,
-            domain="sensor",
-            explicit_mapped_id=mapped_id,
-        )
-        entities.append(
-            FoxessEnergySensor(
-                coordinator=coordinator,
+    # 6. Add software Riemann sum energy sensors only for devices lacking hardware energy registers
+    if not has_hardware_energy:
+        for key, name, power_fn in ENERGY_SENSOR_DESCRIPTIONS:
+            mapped_id = mappings.get(key)
+            target_id = adopt_legacy_entity_id(
+                entity_reg,
                 key=key,
-                name=name,
-                power_fn=power_fn,
-                device=device,
+                domain="sensor",
                 serial=serial,
-                suggested_object_id=suggested_id,
+                explicit_mapped_id=mapped_id,
             )
-        )
+            entities.append(
+                FoxessEnergySensor(
+                    coordinator=coordinator,
+                    key=key,
+                    name=name,
+                    power_fn=power_fn,
+                    device=device,
+                    serial=serial,
+                    target_entity_id=target_id,
+                )
+            )
 
     async_add_entities(entities)
 
@@ -692,6 +885,7 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
         description: FoxessSensorDescription,
         device: Any,
         serial: str,
+        target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
     ) -> None:
         """Initialize the sensor."""
@@ -700,8 +894,10 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
         self._device = device
         self._attr_unique_id = f"{serial}_{description.key}"
         self._attr_device_info = coordinator.device_info
-        if suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            self.entity_id = raw_id if "." in raw_id else f"sensor.{raw_id}"
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
 
     @property
     def native_value(self) -> Any:
@@ -725,6 +921,7 @@ class FoxessEnergySensor(CoordinatorEntity[FoxessDataUpdateCoordinator], Restore
         power_fn: Callable[[Any], float | None],
         device: Any,
         serial: str,
+        target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
     ) -> None:
         """Initialize the energy accumulator sensor."""
@@ -735,8 +932,10 @@ class FoxessEnergySensor(CoordinatorEntity[FoxessDataUpdateCoordinator], Restore
         self._device = device
         self._attr_unique_id = f"{serial}_{key}"
         self._attr_device_info = coordinator.device_info
-        if suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            self.entity_id = raw_id if "." in raw_id else f"sensor.{raw_id}"
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
         self._total_kwh: float = 0.0
         self._last_time: float | None = None
 
