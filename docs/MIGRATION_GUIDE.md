@@ -97,3 +97,29 @@ If you need to change or fine-tune any entity mapping after initial setup:
 ### Entity ID Has a `_2` Suffix
 - If an entity was registered as `sensor.foxess_battery_soc_2`, Home Assistant detected that the original entity ID was still active.
 - To resolve: disable or remove the legacy entity registration in **Settings** > **Devices & Services** > **Entities**, then edit the entity ID of the modern sensor to remove the `_2` suffix.
+
+### Resolving Long-Term Statistics (LTS) Unit or Mean Type Repairs
+If Home Assistant presents a repairs issue stating:
+* *"The unit of sensor.xxx changed to 'W' which cannot be converted to the previously stored unit, 'kWh'"* or
+* *"The mean type of sensor.xxx changed from 'None' to 'Arithmetic'"*
+
+This occurs when a historical integration previously logged an entity with incompatible measurement types:
+1. **Power Sensors** (`_power`): Strictly measured in **W** (watts) with arithmetic mean.
+2. **Energy Sensors** (`_energy_total`): Strictly measured in **kWh** (kilowatt-hours) with sum accumulation.
+
+To resolve:
+1. Open **Settings** > **Developer Tools** > **Statistics**.
+2. Locate the entity flagged with the issue (e.g., `sensor.battery_charge_power`).
+3. Click **Fix Issue** and select **Delete all old statistic data for this entity** (or use the Repairs dialog `Delete` action).
+4. Home Assistant will immediately clear the invalid legacy metadata and begin tracking clean, valid long-term statistics matching Home Assistant Core standards.
+
+---
+
+## Configuration Options
+
+You can adjust the polling behavior at any time:
+1. Navigate to **Settings** > **Devices & Services**.
+2. Locate the **FoxESS Modern** card and click **Configure**.
+3. **Readings Polling Interval**: Select your preferred scan frequency (5, 10, 15, 30, or 60 seconds; default is **15 seconds (Recommended)**).
+4. **Reconfigure Legacy Mappings**: Check this box if you wish to adjust which legacy entity IDs are mapped to specific FoxESS metrics.
+5. Click **Submit** to apply changes without restarting Home Assistant.

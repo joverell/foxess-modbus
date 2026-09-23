@@ -232,10 +232,10 @@ STARTUP SEQUENCE (REVERSE ORDER):
 
 To maintain high reliability across different network environments (especially over wireless bridges or noisy multi-core cable runs), `foxess_modern` adopts the architectural patterns established in [Modernizing Modbus in Home Assistant](https://developers.home-assistant.io/blog/2026/07/05/modernizing-modbus/):
 
-1. **Defensive Register Grouping (`max_span = 32`):**
-   * Rather than issuing dozens of separate single-register queries, `foxess_modern` groups contiguous registers into compact spans capped at 32 registers.
-   * Telemetry is gathered in just 2 or 3 quick transactions. This keeps the serial bus clear for the vast majority of each polling cycle, preventing buffer saturation on sensitive microcontrollers or latency-prone wireless bridges.
-   * Note: While certain hardwired, direct-serial installations can handle wider register spans, limiting transactions to 32 registers represents a proven, defensive default that ensures stability across diverse real-world environments.
+1. **Defensive Register Grouping (`max_span = 8`):**
+   * Rather than issuing dozens of separate single-register queries, `foxess_modern` groups contiguous registers into compact spans capped at 8 registers.
+   * Telemetry is gathered in small, predictable transactions. This keeps the serial bus clear and strictly prevents buffer saturation on FoxESS AUX UART microcontrollers or latency-prone wireless bridges.
+   * Note: While certain hardwired, direct-serial installations might technically tolerate wider spans, limiting transactions to 8 registers represents a proven, defensive standard that ensures complete immunity from microcontroller serial lockups across all FoxESS hardware revisions.
 
 2. **Inter-Frame Timing Safeguards (`message_spacing = 80ms`):**
    * Enforces an 80 ms rest interval between consecutive Modbus transactions, giving the inverter processor and the gateway transceiver sufficient time to clear their receive buffers.

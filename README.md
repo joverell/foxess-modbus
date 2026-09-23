@@ -27,14 +27,14 @@ Built specifically against [`modbus-connection`](https://home-assistant-libs.git
 ## Key Features
 
 - **Backend-Neutral**: Operates on `modbus-connection`, supporting both `tmodbus` and `pymodbus` seamlessly.
-- **Inverter Microcontroller Protection**: Automatically groups and limits register reads (`max_span = 32`) to prevent the FoxESS AUX microcontroller UART FIFO buffer from overflowing and stalling.
+- **Inverter Microcontroller Protection**: Automatically groups and limits register reads (`max_span = 8`) to prevent the FoxESS AUX microcontroller UART FIFO buffer from overflowing and stalling.
 - **Shared Gateway Friendly**: Designed to operate with Home Assistant's `async_get_unit` connection broker. Multiple integrations and meters (e.g. Eastron, heat pumps) can share the same physical RS-485 bridge without bus collisions.
-- **Configurable Polling Interval**: User-selectable scan rate (5s, 10s, 15s, 30s, 60s) configured directly in Options.
+- **Configurable Polling Interval**: User-selectable scan rate (5s, 10s, 15s, 30s, 60s; default is **15s**) configured directly in Options.
 - **First-Class Predbat Automation**: Native signed net grid power sensor (+export, -import) and dedicated services for force charging, force discharging, clearing overrides, and setting work modes using remote active power registers to avoid solar curtailment.
 - **Dynamic Power Scaling**: Scales power limits dynamically up to 30,000 W for commercial H3-Pro systems.
 - **Multi-Model EPS Telemetry**: Real-time backup power, voltage, current, and frequency monitoring across single-phase and three-phase inverters.
 - **Strongly Typed**: Registers and coils map to typed Python properties with automatic endianness and scale factor decoding.
-- **Unit Tested**: Fully tested with mock in-memory Modbus backends.
+- **Fully Tested**: Tested with mock in-memory Modbus backends and automated zero-drift compliance tests.
 
 ---
 
@@ -93,9 +93,10 @@ Navigate to **Settings > Dashboards > Energy** and configure the fields as follo
 To maintain a clean, user-focused overview on the front page, technical implementation details and wiring references have been organized into dedicated documentation files:
 
 * **[Hardware Setup & Field Observations Guide](docs/HARDWARE_SETUP.md)**: Detailed RJ45 and 16-pin connector pinouts, RS-485 bridge configuration (Waveshare, USR, Elfin), Wi-Fi Faraday cage mitigations, UDP fallback, and the complete two-tier power-cycle recovery protocol.
+* **[Internal Architecture & Anti-Drift Reference](docs/INTERNAL_ARCHITECTURE.md)**: Architectural invariants, bounded frame rules (`max_span = 8`), coordinator lifecycle standards, units and statistics integrity, and zero-drift spec enforcement.
 * **[Predbat Integration Guide](docs/PREDBAT_INTEGRATION.md)**: Drop-in `apps.yaml` configuration, signed native net grid power explanation, service automation triggers, and details on preventing solar curtailment via remote active power control.
 * **[Modbus Register Map Reference](docs/MODBUS_REGISTERS.md)**: Comprehensive multi-family register reference across KH, H1/AC1, and H3/H3-Pro models, including telemetry, EPS, and holding registers.
-* **[Migration Guide from Legacy foxess_modbus](docs/MIGRATION_GUIDE.md)**: Step-by-step instructions for transitioning from Nathan Marlor's integration with zero data loss and automated entity mapping.
+* **[Migration Guide from Legacy foxess_modbus](docs/MIGRATION_GUIDE.md)**: Step-by-step instructions for transitioning from Nathan Marlor's integration with zero data loss, automated entity mapping, and statistics validation.
 
 ---
 

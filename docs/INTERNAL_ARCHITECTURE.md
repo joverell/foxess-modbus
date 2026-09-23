@@ -157,7 +157,83 @@ Only declare registers physically implemented by the inverter firmware.
 
 ---
 
-## 6. Summary Checklist for Code Reviews
+## 6. Invariant 5: Zero-Drift Specification Enforcement
+
+### The Rule
+The standalone PyPI library package (`src/foxess_modbus/`) and the vendored Home Assistant custom integration device layer (`custom_components/foxess_modern/device/`) must maintain 100% logical parity at all times.
+
+### Why This Rule Exists
+Custom integrations require vendored code so that HACS users can run without installing external binary wheels or waiting for upstream PyPI releases. However, maintaining two disconnected copies inevitably leads to subtle drift where bug fixes or register additions exist in one copy but not the other.
+
+### How It Is Enforced
+The automated test `tests/test_modbus_connection_spec.py::test_zero_drift_library_and_integration_spec` walks both directories on every test run and asserts identical logic across all Python files. Any modification to `src/` must be mirrored to `custom_components/foxess_modern/device/`, and vice-versa, or the test suite will fail.
+
+All inverter classes (`FoxessKH10Inverter`, `FoxessH1Inverter`, `FoxessH3Inverter`, `FoxessH3ProInverter`) must inherit from `FoxessDevice` and implement the four standard lifecycle methods:
+* `async_update_readings() -> UpdateReport`
+* `async_update_settings() -> UpdateReport`
+* `async_update() -> UpdateReport`
+* `async_read_raw(names: Iterable[str] | None = None) -> Raw`
+
+---
+
+## 7. Invariant 6: Physical Units & Statistics Integrity
+
+### The Rule
+Strictly separate instantaneous power entities from cumulative energy entities in device models, entity descriptions, and migration alias mappings:
+* **Power Entities**:
+  * Unit: `W`
+  * Device Class: `SensorDeviceClass.POWER`
+  * State Class: `SensorStateClass.MEASUREMENT`
+  * Statistics Calculation: Arithmetic mean (`has_mean: True`, `has_sum: False`)
+* **Cumulative Energy Entities**:
+  * Unit: `kWh`
+  * Device Class: `SensorDeviceClass.ENERGY`
+  * State Class: `SensorStateClass.TOTAL_INCREASING` (or `TOTAL`)
+  * Statistics Calculation: Sum accumulation (`has_mean: False`, `has_sum: True`)
+
+### Strict Migration Alias Separation
+In `migration.py`, never mix power and energy aliases. For example:
+* `battery_charge` and `battery_discharge` in legacy integrations tracked instantaneous power (kW).
+* `battery_charge_total` and `battery_discharge_total` tracked cumulative energy (kWh).
+Mapping `battery_charge` into `battery_charge_energy_total` creates inverted units in the recorder metadata and triggers Home Assistant `units_changed` and `mean_type_changed` repairs dialogs.
+
+---
+
+## 8. Invariant 7: Options Flow & Form Standards
+
+### The Rule
+Always use `homeassistant.helpers.selector.SelectSelector` with string values and human-readable option labels for dropdowns in config flows and options flows. Never use `vol.In` with raw integer lists.
+
+### Why This Rule Exists
+Home Assistant frontend web components compare radio and dropdown selections as strings (`item.value === this.value`). When a schema defines options as raw integers (`[5, 10, 15, 30, 60]`), JavaScript string-to-number type mismatches cause all options to render unselected, forcing the user to re-select a value manually on every save.
+
+### The Standard Implementation
+```python
+interval_options = [
+    selector.SelectOptionDict(value="5", label="5 seconds"),
+    selector.SelectOptionDict(value="10", label="10 seconds"),
+    selector.SelectOptionDict(value="15", label="15 seconds (Recommended)"),
+    selector.SelectOptionDict(value="30", label="30 seconds"),
+    selector.SelectOptionDict(value="60", label="60 seconds"),
+]
+curr_str = str(current_scan_interval)
+if not any(opt["value"] == curr_str for opt in interval_options):
+    interval_options.append(selector.SelectOptionDict(value=curr_str, label=f"{curr_str} seconds"))
+
+schema_dict = {
+    vol.Optional(CONF_SCAN_INTERVAL, default=curr_str): selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=interval_options,
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
+    )
+}
+```
+All optional fields, such as `reconfigure_legacy_mappings`, must have explicit labels in `strings.json` and `translations/en.json`.
+
+---
+
+## 9. Summary Checklist for Code Reviews
 
 Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Does the change use `modbus_connection.tmodbus.ModbusConnection`?
@@ -166,4 +242,7 @@ Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Does `FoxessDevice` inherit `Device.async_poll` directly without overriding?
 * [ ] Does the coordinator recycle the bridge via `self.device.modbus_unit.disconnect()` after 3 consecutive dead timeouts?
 * [ ] Do cumulative energy sensors (`RestoreSensor`) maintain `available = True`?
-* [ ] Do all 35 tests in `pytest tests/` pass?
+* [ ] Are power entities (`W`) and energy entities (`kWh`) strictly separated in migration aliases?
+* [ ] Does the options flow use `SelectSelector` with string values and pre-selected defaults?
+* [ ] Are `src/foxess_modbus/` and `custom_components/foxess_modern/device/` 100% synchronized?
+* [ ] Do all 43 tests in `pytest tests/` pass?
