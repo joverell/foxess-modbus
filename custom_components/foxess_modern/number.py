@@ -7,11 +7,12 @@ from typing import Any
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
 from homeassistant.const import UnitOfPower
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import FoxessConfigEntry
-from .const import CONF_MAPPINGS
+from .const import CONF_MAPPINGS, LEGACY_DOMAIN
 from .coordinator import FoxessDataUpdateCoordinator
 
 
@@ -27,8 +28,14 @@ async def async_setup_entry(
     mappings: dict[str, str] = entry.options.get(
         CONF_MAPPINGS, entry.data.get(CONF_MAPPINGS, {})
     )
+    entity_reg = er.async_get(hass)
     min_soc_mapped = mappings.get("min_soc")
-    min_soc_obj_id = min_soc_mapped.split(".", 1)[-1] if min_soc_mapped else None
+    min_soc_obj_id = None
+    if min_soc_mapped:
+        if old_entry := entity_reg.async_get(min_soc_mapped):
+            if old_entry.platform == LEGACY_DOMAIN:
+                entity_reg.async_remove(min_soc_mapped)
+        min_soc_obj_id = min_soc_mapped.split(".", 1)[-1]
 
     async_add_entities([
         FoxessMinSocNumber(coordinator, device, serial, suggested_object_id=min_soc_obj_id),

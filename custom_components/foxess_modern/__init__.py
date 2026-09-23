@@ -6,15 +6,13 @@ from dataclasses import dataclass
 from datetime import timedelta
 import logging
 
-from modbus_connection import ModbusTcpParams
-
-from homeassistant.components.modbus import async_get_unit
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from typing import Any
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
 
+from .connection import ResilientModbusUnit
 from .const import (
     CONF_HOST,
     CONF_PORT,
@@ -49,6 +47,7 @@ class FoxessRuntimeData:
     readings_coordinator: FoxessDataUpdateCoordinator
     settings_coordinator: FoxessDataUpdateCoordinator
     device: Any
+    unit: ResilientModbusUnit
 
 
 type FoxessConfigEntry = ConfigEntry[FoxessRuntimeData]
@@ -125,14 +124,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
     unit_id = entry.data[CONF_UNIT_ID]
     serial = entry.unique_id or f"{host}_{port}_{unit_id}"
 
-    # Request a shared unit from Home Assistant's central Modbus broker
-    unit = async_get_unit(
-        hass,
-        entry,
-        ModbusTcpParams(host=host, port=port),
-        unit_id,
-    )
-
+    unit = ResilientModbusUnit(host=host, port=port, unit_id=unit_id)
     device = create_inverter(unit, serial_number=serial, model=entry.data.get("model"))
 
     scan_interval = entry.options.get(
@@ -159,12 +151,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         await readings_coordinator.async_config_entry_first_refresh()
         await settings_coordinator.async_refresh()
     except Exception as err:
+        await unit.close()
         raise ConfigEntryNotReady(f"Could not connect to FoxESS inverter: {err}") from err
 
     entry.runtime_data = FoxessRuntimeData(
         readings_coordinator=readings_coordinator,
         settings_coordinator=settings_coordinator,
         device=device,
+        unit=unit,
     )
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
@@ -180,4 +174,7 @@ async def update_listener(hass: HomeAssistant, entry: FoxessConfigEntry) -> None
 
 async def async_unload_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bool:
     """Unload a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok and hasattr(entry, "runtime_data") and entry.runtime_data:
+        await entry.runtime_data.unit.close()
+    return unload_ok

@@ -329,3 +329,26 @@ def test_entities_adopt_suggested_object_id():
         suggested_object_id="foxess_min_soc",
     )
     assert getattr(number_entity, "_attr_suggested_object_id", None) == "foxess_min_soc"
+
+
+def test_dynamic_migratable_keys_by_model():
+    """Verify migratable keys dynamically include extra PV strings for KH and H3-Pro."""
+    from custom_components.foxess_modern.const import get_migratable_keys_for_model
+
+    kh_keys = [k[0] for k in get_migratable_keys_for_model("KH Series (KH7 - KH10.5)")]
+    assert "pv1_power" in kh_keys
+    assert "pv2_power" in kh_keys
+    assert "pv3_power" in kh_keys
+    assert "pv4_power" in kh_keys
+    assert "pv5_power" not in kh_keys
+
+    h1_keys = [k[0] for k in get_migratable_keys_for_model("H1 / AC1 Series")]
+    assert "pv1_power" in h1_keys
+    assert "pv2_power" in h1_keys
+    assert "pv3_power" not in h1_keys
+
+    h3_pro_keys = [k[0] for k in get_migratable_keys_for_model("H3-Pro Series (15kW - 30kW)")]
+    assert "pv1_power" in h3_pro_keys
+    assert "pv4_power" in h3_pro_keys
+    assert "pv5_power" in h3_pro_keys
+    assert "pv6_power" in h3_pro_keys

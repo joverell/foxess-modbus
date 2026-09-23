@@ -5,10 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from modbus_connection import ModbusTcpParams
 import voluptuous as vol
 
-from homeassistant.components.modbus import async_get_temporary_unit
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -36,12 +34,17 @@ from .const import (
     DOMAIN,
     LEGACY_DOMAIN,
     MIGRATABLE_KEYS,
+    MODEL_AUTO_DETECT,
+    get_migratable_keys_for_model,
 )
+from .connection import ResilientModbusUnit
 from .device import create_inverter
+from .device.identify import async_detect_inverter
 
 _LOGGER = logging.getLogger(__name__)
 
 SUPPORTED_MODELS: list[str] = [
+    MODEL_AUTO_DETECT,
     "KH Series (KH7 - KH10.5)",
     "H3 Series (H3 / H3 Smart / AC3)",
     "H3-Pro Series (15kW - 30kW)",
@@ -49,23 +52,53 @@ SUPPORTED_MODELS: list[str] = [
 ]
 
 
-def find_smart_matches(entity_reg: er.EntityRegistry) -> dict[str, tuple[list[str], str]]:
+def find_smart_matches(
+    entity_reg: er.EntityRegistry,
+    keys: tuple[tuple[str, str, str], ...] | None = None,
+) -> dict[str, tuple[list[str], str]]:
     """Find candidate entities and smart matches for migratable keys."""
     results: dict[str, tuple[list[str], str]] = {}
+    target_keys = keys if keys is not None else MIGRATABLE_KEYS
 
     aliases: dict[str, list[str]] = {
         "pv_power_total": ["pv_power"],
+        "pv1_power": ["pv1_power"],
+        "pv2_power": ["pv2_power"],
+        "pv3_power": ["pv3_power"],
+        "pv4_power": ["pv4_power"],
+        "pv5_power": ["pv5_power"],
+        "pv6_power": ["pv6_power"],
         "grid_ct_meter_power": ["feed_in_power", "grid_power", "meter_power", "ct_power"],
         "house_load_power": ["load_power", "house_load", "consumption_power"],
-        "grid_import_energy_total": ["grid_consumption_energy", "import_energy"],
-        "grid_export_energy_total": ["feed_in_energy", "export_energy"],
-        "battery_charge_energy_total": ["charge_energy", "battery_charge"],
-        "battery_discharge_energy_total": ["discharge_energy", "battery_discharge"],
+        "grid_import_energy_total": [
+            "grid_consumption_energy_total",
+            "import_energy_total",
+            "grid_consumption_energy",
+            "import_energy",
+        ],
+        "grid_export_energy_total": [
+            "feed_in_energy_total",
+            "export_energy_total",
+            "export_energy",
+            "feed_in_energy",
+        ],
+        "battery_charge_energy_total": [
+            "battery_charge_total",
+            "charge_energy_total",
+            "charge_energy",
+            "battery_charge",
+        ],
+        "battery_discharge_energy_total": [
+            "battery_discharge_total",
+            "discharge_energy_total",
+            "discharge_energy",
+            "battery_discharge",
+        ],
         "work_mode": ["work_mode", "inverter_mode"],
         "min_soc": ["min_soc"],
     }
 
-    for key, _label, platform in MIGRATABLE_KEYS:
+    for key, _label, platform in target_keys:
         candidates = [
             entity.entity_id
             for entity in entity_reg.entities.values()
@@ -103,26 +136,56 @@ def find_smart_matches(entity_reg: er.EntityRegistry) -> dict[str, tuple[list[st
     return results
 
 
+def _clean_host_and_port(data: dict[str, Any]) -> tuple[str, int]:
+    """Clean host and port values from user input."""
+    host = str(data[CONF_HOST]).strip()
+    if "://" in host:
+        host = host.split("://", 1)[1]
+    host = host.rstrip("/")
+    port = data.get(CONF_PORT, DEFAULT_PORT)
+    if ":" in host:
+        parts = host.split(":", 1)
+        host = parts[0]
+        if parts[1].isdigit():
+            port = int(parts[1])
+    return host, int(port)
+
+
 async def validate_input(hass: Any, data: dict[str, Any]) -> dict[str, Any]:
     """Validate that the user input can connect to the inverter."""
-    host = data[CONF_HOST]
-    port = data[CONF_PORT]
+    host, port = _clean_host_and_port(data)
     unit_id = data[CONF_UNIT_ID]
-    model = data[CONF_MODEL]
-    params = ModbusTcpParams(host=host, port=port)
+    model = data.get(CONF_MODEL, MODEL_AUTO_DETECT)
 
+    unit = ResilientModbusUnit(host=host, port=port, unit_id=unit_id)
     try:
-        # Use Home Assistant's temporary connection broker to probe the device
-        async with async_get_temporary_unit(hass, params, unit_id) as unit:
-            inverter = create_inverter(unit, model=model)
-            report = await inverter.async_update_readings()
-            if not report.updated:
-                raise CannotConnect("No registers answered on probe")
-    except Exception as err:
-        _LOGGER.error("Cannot connect to FoxESS inverter at %s:%s (unit %s, model %s): %s", host, port, unit_id, model, err)
-        raise CannotConnect from err
+        # Detect inverter model and serial number over Modbus
+        detected_model, detected_serial = await async_detect_inverter(unit)
+        if model == MODEL_AUTO_DETECT or not model:
+            model = detected_model
+            data[CONF_MODEL] = detected_model
+        if detected_serial:
+            data["serial_number"] = detected_serial
 
-    return {"title": f"FoxESS {model} ({host})"}
+        inverter = create_inverter(unit, serial_number=detected_serial, model=model)
+        report = await inverter.async_update_readings()
+        if not report.updated:
+            raise CannotConnect("No registers answered on probe")
+    except Exception as err:
+        _LOGGER.error(
+            "Cannot connect to FoxESS inverter at %s:%s (unit %s, model %s): %s",
+            host,
+            port,
+            unit_id,
+            model,
+            err,
+        )
+        raise CannotConnect from err
+    finally:
+        await unit.close()
+
+    serial_display = data.get("serial_number") or host
+    return {"title": f"FoxESS {model} ({serial_display})"}
 
 
 class FoxessModernConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -148,6 +211,10 @@ class FoxessModernConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            clean_host, clean_port = _clean_host_and_port(user_input)
+            user_input[CONF_HOST] = clean_host
+            user_input[CONF_PORT] = clean_port
+
             unique_id = f"{user_input[CONF_HOST]}_{user_input[CONF_PORT]}_{user_input[CONF_UNIT_ID]}"
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
@@ -173,7 +240,7 @@ class FoxessModernConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_HOST): str,
                 vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
                 vol.Required(CONF_UNIT_ID, default=DEFAULT_UNIT_ID): int,
-                vol.Required(CONF_MODEL, default=DEFAULT_MODEL): vol.In(SUPPORTED_MODELS),
+                vol.Required(CONF_MODEL, default=MODEL_AUTO_DETECT): vol.In(SUPPORTED_MODELS),
                 vol.Optional(CONF_MIGRATE, default=has_legacy): bool,
             }
         )
@@ -199,11 +266,13 @@ class FoxessModernConfigFlow(ConfigFlow, domain=DOMAIN):
                 data=self._user_input,
             )
 
+        model = self._user_input.get(CONF_MODEL, DEFAULT_MODEL)
+        keys = get_migratable_keys_for_model(model)
         entity_reg = er.async_get(self.hass)
-        matches = find_smart_matches(entity_reg)
+        matches = find_smart_matches(entity_reg, keys)
 
         schema_dict: dict[Any, Any] = {}
-        for key, _label, _platform in MIGRATABLE_KEYS:
+        for key, _label, _platform in keys:
             options, default_val = matches[key]
             schema_dict[vol.Optional(key, default=default_val)] = vol.In(options)
 
@@ -240,8 +309,10 @@ class FoxessModernOptionsFlow(OptionsFlow):
                 data={CONF_MAPPINGS: mappings, CONF_SCAN_INTERVAL: scan_interval},
             )
 
+        model = self._config_entry.data.get(CONF_MODEL, DEFAULT_MODEL)
+        keys = get_migratable_keys_for_model(model)
         entity_reg = er.async_get(self.hass)
-        matches = find_smart_matches(entity_reg)
+        matches = find_smart_matches(entity_reg, keys)
         current_mappings = self._config_entry.options.get(
             CONF_MAPPINGS, self._config_entry.data.get(CONF_MAPPINGS, {})
         )
@@ -251,7 +322,7 @@ class FoxessModernOptionsFlow(OptionsFlow):
                 ALLOWED_SCAN_INTERVALS
             )
         }
-        for key, _label, _platform in MIGRATABLE_KEYS:
+        for key, _label, _platform in keys:
             options, smart_default = matches[key]
             current_val = current_mappings.get(key, smart_default)
             if current_val not in options:

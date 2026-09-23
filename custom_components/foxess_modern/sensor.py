@@ -24,11 +24,12 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import FoxessConfigEntry
-from .const import CONF_MAPPINGS
+from .const import CONF_MAPPINGS, LEGACY_DOMAIN
 from .coordinator import FoxessDataUpdateCoordinator
 
 
@@ -635,10 +636,16 @@ async def async_setup_entry(
         if hasattr(device.grid, "ct2_power"):
             descriptions.append(CT2_SENSOR_DESCRIPTION)
 
+    entity_reg = er.async_get(hass)
     entities: list[SensorEntity] = []
     for description in descriptions:
         mapped_id = mappings.get(description.key)
-        suggested_id = mapped_id.split(".", 1)[-1] if mapped_id else None
+        suggested_id = None
+        if mapped_id:
+            if old_entry := entity_reg.async_get(mapped_id):
+                if old_entry.platform == LEGACY_DOMAIN:
+                    entity_reg.async_remove(mapped_id)
+            suggested_id = mapped_id.split(".", 1)[-1]
         entities.append(
             FoxessSensorEntity(
                 coordinator,
@@ -652,7 +659,12 @@ async def async_setup_entry(
     # 3. Add cumulative Energy Dashboard sensors (kWh)
     for key, name, power_fn in ENERGY_SENSOR_DESCRIPTIONS:
         mapped_id = mappings.get(key)
-        suggested_id = mapped_id.split(".", 1)[-1] if mapped_id else None
+        suggested_id = None
+        if mapped_id:
+            if old_entry := entity_reg.async_get(mapped_id):
+                if old_entry.platform == LEGACY_DOMAIN:
+                    entity_reg.async_remove(mapped_id)
+            suggested_id = mapped_id.split(".", 1)[-1]
         entities.append(
             FoxessEnergySensor(
                 coordinator=coordinator,
