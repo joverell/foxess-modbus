@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from modbus_connection.model import Device, Raw, UpdateReport
+from modbus_connection.model import Raw, UpdateReport
 
 from ..const import WorkMode
+from ..model import FoxessDevice
 from .battery import FoxessH1Battery
 from .control import FoxessH1Control
 from .grid import FoxessH1Grid
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
     from modbus_connection import ModbusUnit
 
 
-class FoxessH1Inverter(Device):
+class FoxessH1Inverter(FoxessDevice):
     """FoxESS H1 / AC1 Hybrid Inverter reached through a ModbusUnit.
 
     Provides high-level async methods for telemetry polling and inverter control.

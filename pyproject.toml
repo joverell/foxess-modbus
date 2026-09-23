@@ -46,4 +46,4 @@ packages = ["src/foxess_modbus"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src", "."]
