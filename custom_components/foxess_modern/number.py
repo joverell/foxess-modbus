@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
+from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode, RestoreNumber
 from homeassistant.const import UnitOfElectricCurrent, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -130,6 +130,9 @@ async def async_setup_entry(
             target_entity_id=_get_target_id("force_discharge_power"),
         )
     )
+
+    async_add_entities(entities)
+
 
 class FoxessBaseNumberEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberEntity):
     """Base class for FoxESS Modern number entities."""
@@ -474,7 +477,7 @@ def get_max_inverter_power(device: Any) -> float:
     return 30000.0
 
 
-class FoxessForceChargePowerNumber(FoxessBaseNumberEntity):
+class FoxessForceChargePowerNumber(FoxessBaseNumberEntity, RestoreNumber):
     """Number entity for setting Force Charge Power."""
 
     _attr_native_min_value = 0.0
@@ -498,7 +501,7 @@ class FoxessForceChargePowerNumber(FoxessBaseNumberEntity):
         self._attr_name = "Force Charge Power"
         self._attr_device_info = coordinator.device_info
         self._attr_native_max_value = get_max_inverter_power(device)
-        self._target_power: float = 5000.0
+        self._target_power: float = 10500.0
         raw_id = target_entity_id or suggested_object_id
         if raw_id:
             if not raw_id.startswith("number."):
@@ -508,6 +511,13 @@ class FoxessForceChargePowerNumber(FoxessBaseNumberEntity):
         elif suggested_object_id:
             self._attr_suggested_object_id = suggested_object_id
 
+    async def async_added_to_hass(self) -> None:
+        """Handle entity restore."""
+        await super().async_added_to_hass()
+        if (last_state := await self.async_get_last_number_data()) is not None:
+            if last_state.native_value is not None:
+                self._target_power = float(last_state.native_value)
+
     @property
     def native_value(self) -> float:
         """Return target force charge power."""
@@ -516,9 +526,10 @@ class FoxessForceChargePowerNumber(FoxessBaseNumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Set the force charge power."""
         self._target_power = value
+        self.async_write_ha_state()
 
 
-class FoxessForceDischargePowerNumber(FoxessBaseNumberEntity):
+class FoxessForceDischargePowerNumber(FoxessBaseNumberEntity, RestoreNumber):
     """Number entity for setting Force Discharge Power."""
 
     _attr_native_min_value = 0.0
@@ -542,7 +553,7 @@ class FoxessForceDischargePowerNumber(FoxessBaseNumberEntity):
         self._attr_name = "Force Discharge Power"
         self._attr_device_info = coordinator.device_info
         self._attr_native_max_value = get_max_inverter_power(device)
-        self._target_power: float = 5000.0
+        self._target_power: float = 10500.0
         raw_id = target_entity_id or suggested_object_id
         if raw_id:
             if not raw_id.startswith("number."):
@@ -552,6 +563,13 @@ class FoxessForceDischargePowerNumber(FoxessBaseNumberEntity):
         elif suggested_object_id:
             self._attr_suggested_object_id = suggested_object_id
 
+    async def async_added_to_hass(self) -> None:
+        """Handle entity restore."""
+        await super().async_added_to_hass()
+        if (last_state := await self.async_get_last_number_data()) is not None:
+            if last_state.native_value is not None:
+                self._target_power = float(last_state.native_value)
+
     @property
     def native_value(self) -> float:
         """Return target force discharge power."""
@@ -560,3 +578,4 @@ class FoxessForceDischargePowerNumber(FoxessBaseNumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Set the force discharge power."""
         self._target_power = value
+        self.async_write_ha_state()
