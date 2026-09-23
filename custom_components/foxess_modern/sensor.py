@@ -901,6 +901,11 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
             self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
 
     @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.is_available
+
+    @property
     def native_value(self) -> Any:
         """Return the state of the sensor."""
         return self.entity_description.value_fn(self._device)
@@ -967,6 +972,11 @@ class FoxessEnergySensor(CoordinatorEntity[FoxessDataUpdateCoordinator], Restore
 
         self._last_time = now
         self.async_write_ha_state()
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.is_available
 
     @property
     def native_value(self) -> float:

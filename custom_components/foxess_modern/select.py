@@ -56,6 +56,11 @@ class FoxessWorkModeSelect(CoordinatorEntity[FoxessDataUpdateCoordinator], Selec
     _attr_has_entity_name = False
     _attr_options = list(_WORK_MODE_OPTIONS.keys())
 
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.is_available
+
     def __init__(
         self,
         coordinator: FoxessDataUpdateCoordinator,

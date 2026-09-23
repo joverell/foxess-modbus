@@ -136,6 +136,11 @@ class FoxessBaseNumberEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], Num
 
     _attr_has_entity_name = False
 
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.is_available
+
 
 class FoxessMinSocNumber(FoxessBaseNumberEntity):
     """Number entity for setting Inverter Min SOC."""

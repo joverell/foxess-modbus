@@ -5,22 +5,23 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from modbus_connection.model import Device, Raw, UpdateReport
+from modbus_connection.model import Raw, UpdateReport
 
 from ..const import WorkMode
+from ..model import FoxessDevice
 from .battery import FoxessKH10Battery
 from .bms import FoxessKH10BMS
 from .control import FoxessKH10Control
 from .energy import FoxessKH10Energy
 from .grid import FoxessKH10Grid
-from .inverter import FoxessKH10InverterState
+from .inverter import FoxessKH10FirmwareVersion, FoxessKH10InverterState
 from .pv import FoxessKH10PV
 
 if TYPE_CHECKING:
     from modbus_connection import ModbusUnit
 
 
-class FoxessKH10Inverter(Device):
+class FoxessKH10Inverter(FoxessDevice):
     """FoxESS KH10 Hybrid Inverter reached through a ModbusUnit.
 
     Provides high-level async methods for telemetry polling and inverter control.
@@ -44,11 +45,12 @@ class FoxessKH10Inverter(Device):
         self.bms = FoxessKH10BMS(unit)
         self.energy = FoxessKH10Energy(unit)
         self.grid = FoxessKH10Grid(unit)
-        self.inverter = FoxessKH10InverterState(unit)
+        self.versions = FoxessKH10FirmwareVersion(unit)
+        self.inverter = FoxessKH10InverterState(unit, self.versions)
         self.control = FoxessKH10Control(unit)
 
         self._readings: tuple[str, ...] = ("pv", "battery", "bms", "energy", "grid", "inverter")
-        self._settings: tuple[str, ...] = ("control",)
+        self._settings: tuple[str, ...] = ("control", "versions")
 
     async def _async_setup(self) -> None:
         """Perform initial setup or validation if needed."""

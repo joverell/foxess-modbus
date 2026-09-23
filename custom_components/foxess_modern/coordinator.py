@@ -41,6 +41,12 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[None]):
         self.device = device
         self._update_method = update_method
         self._consecutive_failures = 0
+        self._is_available = True
+
+    @property
+    def is_available(self) -> bool:
+        """Return True if inverter communication has not suffered extended outage."""
+        return self._is_available
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -56,16 +62,25 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[None]):
         """Fetch the latest data from the inverter."""
         try:
             report = await self._update_method()
+            if hasattr(report, "updated") and not report.updated and hasattr(report, "failed") and report.failed:
+                raise RuntimeError(
+                    f"All requested sub-systems failed to respond: {list(report.failed.keys())}"
+                )
             self._consecutive_failures = 0
-            if report.failed:
-                _LOGGER.warning("Partial read notice from FoxESS: %s", report.failed)
+            self._is_available = True
+            if hasattr(report, "failed") and report.failed:
+                _LOGGER.debug(
+                    "Partial read notice from FoxESS (transient sub-system retry scheduled): %s",
+                    report.failed,
+                )
         except Exception as err:
             self._consecutive_failures += 1
-            if self._consecutive_failures < 3:
+            if self._consecutive_failures < 5:
                 _LOGGER.warning(
-                    "Transient communication error with FoxESS (attempt %d/3): %s",
+                    "Transient communication error with FoxESS (attempt %d/5): %s",
                     self._consecutive_failures,
                     err,
                 )
                 return
+            self._is_available = False
             raise UpdateFailed(f"Error communicating with FoxESS: {err}") from err

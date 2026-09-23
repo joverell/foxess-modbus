@@ -14,6 +14,12 @@ import struct
 import time
 from typing import Any
 
+from modbus_connection.exceptions import (
+    ModbusConnectionError,
+    ModbusExceptionError,
+    ModbusTimeoutError,
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -23,7 +29,8 @@ class ResilientModbusUnit:
     Robustly handles:
     1. Pre-send buffer draining (cleans floating RS-485 line chatter).
     2. Adaptive frame alignment (handles leading zero bytes from UART transceivers).
-    3. Auto-reconnection with backoff on network dropouts.
+    3. Persistent socket retention (avoids socket churn on transient frame hiccups).
+    4. Auto-reconnection with backoff on genuine network dropouts.
     """
 
     def __init__(
@@ -31,7 +38,7 @@ class ResilientModbusUnit:
         host: str,
         port: int = 502,
         unit_id: int = 247,
-        timeout: float = 3.0,
+        timeout: float = 1.5,
     ) -> None:
         """Initialize the resilient unit."""
         self.host = host
@@ -42,7 +49,7 @@ class ResilientModbusUnit:
         self._lock = asyncio.Lock()
         self._sock: socket.socket | None = None
         self._connected = False
-        self._spacing = 0.12
+        self._spacing = 0.08
         self._last_request_time = 0.0
         self._conn_lost_callbacks: list[Callable[[], None]] = []
 
@@ -58,6 +65,8 @@ class ResilientModbusUnit:
             s.settimeout(self.timeout)
             s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             s.connect((self.host, self.port))
+            # Settle time after TCP connect to allow UART transceiver to stabilize
+            time.sleep(0.05)
             self._sock = s
             self._connected = True
         return self._sock
@@ -95,7 +104,7 @@ class ResilientModbusUnit:
             time.sleep(self._spacing - elapsed)
 
         last_err: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 s = self._get_socket()
                 self._purge(s)
@@ -115,14 +124,14 @@ class ResilientModbusUnit:
                 while time.time() - start < self.timeout:
                     c = s.recv(1024)
                     if not c:
-                        break
+                        raise ConnectionResetError("Connection closed by peer")
                     buf += c
 
                     # Check exception response
                     err_idx = buf.find(err_header)
                     if err_idx != -1 and len(buf) >= err_idx + 3:
                         err_code = buf[err_idx + 2]
-                        raise RuntimeError(f"Modbus exception response: code {err_code:#04x}")
+                        raise ModbusExceptionError(err_code)
 
                     # Check normal response
                     idx = buf.find(expected_header)
@@ -133,12 +142,26 @@ class ResilientModbusUnit:
                             data_bytes = buf[data_start : data_start + data_len]
                             words = struct.unpack(f">{count}H", data_bytes)
                             return list(words)
-            except Exception as e:
+            except ModbusExceptionError:
+                raise
+            except (socket.error, ConnectionResetError, BrokenPipeError) as e:
                 last_err = e
                 self._close_socket()
-                time.sleep(0.25 * (attempt + 1))
+                time.sleep(0.1 * (attempt + 1))
+            except Exception as e:
+                last_err = e
+                # Transient frame mismatch or read timeout: do not tear down the socket,
+                # just sleep briefly and retry with a clean purged buffer on next attempt.
+                time.sleep(0.08 * (attempt + 1))
 
-        raise TimeoutError(f"Failed to read fc={fc} addr={address} count={count}: {last_err}")
+        if isinstance(last_err, (socket.error, ConnectionResetError, BrokenPipeError)):
+            raise ModbusConnectionError(
+                f"Failed to read fc={fc} addr={address} count={count}: {last_err}"
+            ) from last_err
+
+        raise ModbusTimeoutError(
+            f"Failed to read fc={fc} addr={address} count={count}: {last_err}"
+        )
 
     def _sync_write_single_register(self, address: int, value: int) -> None:
         """Perform a synchronous single register write with verification."""
@@ -148,7 +171,7 @@ class ResilientModbusUnit:
             time.sleep(self._spacing - elapsed)
 
         last_err: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 s = self._get_socket()
                 self._purge(s)
@@ -168,25 +191,35 @@ class ResilientModbusUnit:
                 while time.time() - start < self.timeout:
                     c = s.recv(1024)
                     if not c:
-                        break
+                        raise ConnectionResetError("Connection closed by peer")
                     buf += c
 
                     err_idx = buf.find(err_header)
                     if err_idx != -1 and len(buf) >= err_idx + 3:
                         err_code = buf[err_idx + 2]
-                        raise RuntimeError(f"Modbus exception on write: code {err_code:#04x}")
+                        raise ModbusExceptionError(err_code)
 
                     idx = buf.find(expected_header)
                     if idx != -1 and len(buf) >= idx + 6:
                         resp_addr, resp_val = struct.unpack(">HH", buf[idx + 2 : idx + 6])
                         if resp_addr == address and resp_val == value:
                             return
-            except Exception as e:
+            except ModbusExceptionError:
+                raise
+            except (socket.error, ConnectionResetError, BrokenPipeError) as e:
                 last_err = e
                 self._close_socket()
                 time.sleep(0.1 * (attempt + 1))
+            except Exception as e:
+                last_err = e
+                time.sleep(0.08 * (attempt + 1))
 
-        raise TimeoutError(
+        if isinstance(last_err, (socket.error, ConnectionResetError, BrokenPipeError)):
+            raise ModbusConnectionError(
+                f"Failed to write single register addr={address} val={value}: {last_err}"
+            ) from last_err
+
+        raise ModbusTimeoutError(
             f"Failed to write single register addr={address} val={value}: {last_err}"
         )
 
@@ -202,7 +235,7 @@ class ResilientModbusUnit:
         packed_vals = struct.pack(f">{count}H", *values)
 
         last_err: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 s = self._get_socket()
                 self._purge(s)
@@ -230,27 +263,35 @@ class ResilientModbusUnit:
                 while time.time() - start < self.timeout:
                     c = s.recv(1024)
                     if not c:
-                        break
+                        raise ConnectionResetError("Connection closed by peer")
                     buf += c
 
                     err_idx = buf.find(err_header)
                     if err_idx != -1 and len(buf) >= err_idx + 3:
                         err_code = buf[err_idx + 2]
-                        raise RuntimeError(
-                            f"Modbus exception on multiple write: code {err_code:#04x}"
-                        )
+                        raise ModbusExceptionError(err_code)
 
                     idx = buf.find(expected_header)
                     if idx != -1 and len(buf) >= idx + 6:
                         resp_addr, resp_count = struct.unpack(">HH", buf[idx + 2 : idx + 6])
                         if resp_addr == address and resp_count == count:
                             return
-            except Exception as e:
+            except ModbusExceptionError:
+                raise
+            except (socket.error, ConnectionResetError, BrokenPipeError) as e:
                 last_err = e
                 self._close_socket()
                 time.sleep(0.1 * (attempt + 1))
+            except Exception as e:
+                last_err = e
+                time.sleep(0.08 * (attempt + 1))
 
-        raise TimeoutError(
+        if isinstance(last_err, (socket.error, ConnectionResetError, BrokenPipeError)):
+            raise ModbusConnectionError(
+                f"Failed to write multiple registers addr={address} count={count}: {last_err}"
+            ) from last_err
+
+        raise ModbusTimeoutError(
             f"Failed to write multiple registers addr={address} count={count}: {last_err}"
         )
 

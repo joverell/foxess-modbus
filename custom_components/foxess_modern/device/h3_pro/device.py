@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from modbus_connection.model import Device, Raw, UpdateReport
+from modbus_connection.model import Raw, UpdateReport
 
 from ..const import WorkMode
+from ..model import FoxessDevice
 from ..h3.battery import FoxessH3Battery
 from ..h3.control import FoxessH3Control
 from ..h3.grid import FoxessH3Grid
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
     from modbus_connection import ModbusUnit
 
 
-class FoxessH3ProInverter(Device):
+class FoxessH3ProInverter(FoxessDevice):
     """FoxESS H3-Pro Commercial Three-Phase Hybrid Inverter (up to 6 PV strings)."""
 
     def __init__(
