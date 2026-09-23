@@ -905,7 +905,12 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
         """Return True if entity is available."""
         if self.entity_description.key == "connection_status":
             return True
-        if self.entity_description.key in ("master_version", "slave_version", "manager_version"):
+        if self.entity_description.key in (
+            "master_version",
+            "slave_version",
+            "manager_version",
+            "inverter_state",
+        ):
             if self.native_value is not None:
                 return True
         return self.coordinator.is_available

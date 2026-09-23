@@ -50,7 +50,10 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
 
     @property
     def is_available(self) -> bool:
-        """Return True if coordinator successfully updated data."""
+        """Return True if coordinator successfully updated data or within transient tolerance."""
+        if self._is_fast_poll and self._timeouts < 2 and self.data is not None:
+            # Tolerate a single transient poll timeout on Wi-Fi without flapping entity availability
+            return True
         return self.last_update_success
 
     @property
