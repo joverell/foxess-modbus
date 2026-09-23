@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modbus_connection.model import int32, integer
+from modbus_connection.model import gauge, int32, integer
 
 from ..const import WorkMode
 from ..model import FoxessComponent
