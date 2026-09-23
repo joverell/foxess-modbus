@@ -64,6 +64,16 @@ Copy `custom_components/foxess_modern` into your Home Assistant `<config>/custom
 
 ---
 
+## Migrating from Legacy `foxess_modbus`
+
+Transitioning from Nathan Marlor's original `foxess_modbus` integration to `foxess_modern` is fully supported with **zero data loss**:
+
+- **Keep Long-Term Statistics**: Home Assistant tracks history by `entity_id`. `foxess_modern` provides an automated **Smart Sensor Mapping Wizard** that matches your existing legacy entity IDs so all historical graphs and Energy Dashboard metrics continue seamlessly.
+- **Conflict Prevention**: Disable (do not delete yet) your existing `foxess_modbus` entry in **Settings > Devices & Services** before adding `foxess_modern` to ensure port 502 on your RS-485 bridge is released.
+- **Step-by-Step Instructions**: See our dedicated **[Migration Guide](docs/MIGRATION_GUIDE.md)** for detailed walkthroughs, credit acknowledgements, and troubleshooting steps.
+
+---
+
 ## Home Assistant Energy Dashboard Setup
 
 `foxess_modern` automatically creates native cumulative energy entities (measured in **kWh** with `device_class: energy` and `state_class: total_increasing`). These sensors persist across Home Assistant restarts and are directly selectable in Home Assistant's built-in **Energy Dashboard** without needing to manually configure Riemann sum integral helpers.

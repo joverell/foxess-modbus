@@ -8,7 +8,26 @@
           "host": "Host (IP or hostname of RS-485 Gateway)",
           "port": "Port",
           "unit_id": "Modbus Slave ID",
-          "model": "Inverter Model"
+          "model": "Inverter Model",
+          "migrate_legacy": "Migrate entity IDs from legacy foxess_modbus integration"
+        }
+      },
+      "migration_mapping": {
+        "title": "Legacy Sensor Mapping",
+        "description": "FoxESS Modern detected existing legacy sensors. Review or adjust entity ID mappings below so your automations, dashboards, and historical statistics continue seamlessly without interruption.",
+        "data": {
+          "battery_soc": "Battery SoC Sensor",
+          "pv_power_total": "Total PV Power Sensor",
+          "pv1_power": "PV1 String Power Sensor",
+          "pv2_power": "PV2 String Power Sensor",
+          "grid_ct_meter_power": "Grid CT Meter Power Sensor",
+          "house_load_power": "House Load Power Sensor",
+          "grid_import_energy_total": "Grid Import Energy Total (kWh)",
+          "grid_export_energy_total": "Grid Export Energy Total (kWh)",
+          "battery_charge_energy_total": "Battery Charge Energy Total (kWh)",
+          "battery_discharge_energy_total": "Battery Discharge Energy Total (kWh)",
+          "work_mode": "Inverter Work Mode Select",
+          "min_soc": "Min SoC Number Entity"
         }
       }
     },
@@ -18,6 +37,28 @@
     },
     "abort": {
       "already_configured": "This FoxESS inverter connection is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "FoxESS Modern Options",
+        "description": "Map FoxESS Modern sensors to legacy entity IDs to preserve history and automations.",
+        "data": {
+          "battery_soc": "Battery SoC Sensor",
+          "pv_power_total": "Total PV Power Sensor",
+          "pv1_power": "PV1 String Power Sensor",
+          "pv2_power": "PV2 String Power Sensor",
+          "grid_ct_meter_power": "Grid CT Meter Power Sensor",
+          "house_load_power": "House Load Power Sensor",
+          "grid_import_energy_total": "Grid Import Energy Total (kWh)",
+          "grid_export_energy_total": "Grid Export Energy Total (kWh)",
+          "battery_charge_energy_total": "Battery Charge Energy Total (kWh)",
+          "battery_discharge_energy_total": "Battery Discharge Energy Total (kWh)",
+          "work_mode": "Inverter Work Mode Select",
+          "min_soc": "Min SoC Number Entity"
+        }
+      }
     }
   }
 }

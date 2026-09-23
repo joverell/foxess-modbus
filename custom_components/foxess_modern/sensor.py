@@ -27,6 +27,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import FoxessConfigEntry
+from .const import CONF_MAPPINGS
 from .coordinator import FoxessDataUpdateCoordinator
 
 
@@ -465,6 +466,9 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.readings_coordinator
     device = entry.runtime_data.device
     serial = str(entry.unique_id)
+    mappings: dict[str, str] = entry.options.get(
+        CONF_MAPPINGS, entry.data.get(CONF_MAPPINGS, {})
+    )
 
     descriptions: list[FoxessSensorDescription] = list(BASE_SENSOR_DESCRIPTIONS)
 
@@ -482,13 +486,24 @@ async def async_setup_entry(
     elif hasattr(device.grid, "voltage"):
         descriptions.extend(SINGLE_PHASE_GRID_DESCRIPTIONS)
 
-    entities: list[SensorEntity] = [
-        FoxessSensorEntity(coordinator, description, device, serial)
-        for description in descriptions
-    ]
+    entities: list[SensorEntity] = []
+    for description in descriptions:
+        mapped_id = mappings.get(description.key)
+        suggested_id = mapped_id.split(".", 1)[-1] if mapped_id else None
+        entities.append(
+            FoxessSensorEntity(
+                coordinator,
+                description,
+                device,
+                serial,
+                suggested_object_id=suggested_id,
+            )
+        )
 
     # 3. Add cumulative Energy Dashboard sensors (kWh)
     for key, name, power_fn in ENERGY_SENSOR_DESCRIPTIONS:
+        mapped_id = mappings.get(key)
+        suggested_id = mapped_id.split(".", 1)[-1] if mapped_id else None
         entities.append(
             FoxessEnergySensor(
                 coordinator=coordinator,
@@ -497,6 +512,7 @@ async def async_setup_entry(
                 power_fn=power_fn,
                 device=device,
                 serial=serial,
+                suggested_object_id=suggested_id,
             )
         )
 
@@ -514,6 +530,7 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
         description: FoxessSensorDescription,
         device: Any,
         serial: str,
+        suggested_object_id: str | None = None,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
@@ -521,6 +538,8 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
         self._device = device
         self._attr_unique_id = f"{serial}_{description.key}"
         self._attr_device_info = coordinator.device_info
+        if suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> Any:
@@ -544,6 +563,7 @@ class FoxessEnergySensor(CoordinatorEntity[FoxessDataUpdateCoordinator], Restore
         power_fn: Callable[[Any], float | None],
         device: Any,
         serial: str,
+        suggested_object_id: str | None = None,
     ) -> None:
         """Initialize the energy accumulator sensor."""
         super().__init__(coordinator)
@@ -553,6 +573,8 @@ class FoxessEnergySensor(CoordinatorEntity[FoxessDataUpdateCoordinator], Restore
         self._device = device
         self._attr_unique_id = f"{serial}_{key}"
         self._attr_device_info = coordinator.device_info
+        if suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
         self._total_kwh: float = 0.0
         self._last_time: float | None = None
 

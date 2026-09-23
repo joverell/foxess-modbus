@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import FoxessConfigEntry
+from .const import CONF_MAPPINGS
 from .coordinator import FoxessDataUpdateCoordinator
 
 
@@ -23,9 +24,14 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.settings_coordinator
     device = entry.runtime_data.device
     serial = str(entry.unique_id)
+    mappings: dict[str, str] = entry.options.get(
+        CONF_MAPPINGS, entry.data.get(CONF_MAPPINGS, {})
+    )
+    min_soc_mapped = mappings.get("min_soc")
+    min_soc_obj_id = min_soc_mapped.split(".", 1)[-1] if min_soc_mapped else None
 
     async_add_entities([
-        FoxessMinSocNumber(coordinator, device, serial),
+        FoxessMinSocNumber(coordinator, device, serial, suggested_object_id=min_soc_obj_id),
         FoxessForceChargePowerNumber(coordinator, device, serial),
         FoxessForceDischargePowerNumber(coordinator, device, serial),
     ])
@@ -41,13 +47,21 @@ class FoxessMinSocNumber(CoordinatorEntity[FoxessDataUpdateCoordinator], NumberE
     _attr_device_class = NumberDeviceClass.BATTERY
     _attr_mode = NumberMode.BOX
 
-    def __init__(self, coordinator: FoxessDataUpdateCoordinator, device: Any, serial: str) -> None:
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        suggested_object_id: str | None = None,
+    ) -> None:
         """Initialize the number entity."""
         super().__init__(coordinator)
         self._device = device
         self._attr_unique_id = f"{serial}_min_soc"
         self._attr_name = "Min SoC"
         self._attr_device_info = coordinator.device_info
+        if suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float | None:

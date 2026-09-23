@@ -9,18 +9,30 @@ from modbus_connection import ModbusTcpParams
 import voluptuous as vol
 
 from homeassistant.components.modbus import async_get_temporary_unit
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     CONF_HOST,
+    CONF_MAPPINGS,
+    CONF_MIGRATE,
     CONF_MODEL,
     CONF_PORT,
     CONF_UNIT_ID,
+    DEFAULT_CREATE_NEW,
     DEFAULT_MODEL,
     DEFAULT_PORT,
     DEFAULT_UNIT_ID,
     DOMAIN,
+    LEGACY_DOMAIN,
+    MIGRATABLE_KEYS,
 )
 from .device import create_inverter
 
@@ -33,14 +45,59 @@ SUPPORTED_MODELS: list[str] = [
     "H1 / AC1 Series",
 ]
 
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_HOST): str,
-        vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
-        vol.Required(CONF_UNIT_ID, default=DEFAULT_UNIT_ID): int,
-        vol.Required(CONF_MODEL, default=DEFAULT_MODEL): vol.In(SUPPORTED_MODELS),
+
+def find_smart_matches(entity_reg: er.EntityRegistry) -> dict[str, tuple[list[str], str]]:
+    """Find candidate entities and smart matches for migratable keys."""
+    results: dict[str, tuple[list[str], str]] = {}
+
+    aliases: dict[str, list[str]] = {
+        "pv_power_total": ["pv_power"],
+        "grid_ct_meter_power": ["feed_in_power", "grid_power", "meter_power", "ct_power"],
+        "house_load_power": ["load_power", "house_load", "consumption_power"],
+        "grid_import_energy_total": ["grid_consumption_energy", "import_energy"],
+        "grid_export_energy_total": ["feed_in_energy", "export_energy"],
+        "battery_charge_energy_total": ["charge_energy", "battery_charge"],
+        "battery_discharge_energy_total": ["discharge_energy", "battery_discharge"],
+        "work_mode": ["work_mode", "inverter_mode"],
+        "min_soc": ["min_soc"],
     }
-)
+
+    for key, _label, platform in MIGRATABLE_KEYS:
+        candidates = [
+            entity.entity_id
+            for entity in entity_reg.entities.values()
+            if entity.domain == platform
+            and (
+                entity.platform == LEGACY_DOMAIN
+                or "foxess" in entity.entity_id.lower()
+                or key in entity.entity_id.lower()
+            )
+        ]
+        candidates = sorted(set(candidates))
+
+        smart_match = DEFAULT_CREATE_NEW
+
+        # Match 1: candidate ends with key or contains _key_ or .key
+        for cand in candidates:
+            cand_lower = cand.lower()
+            if cand_lower.endswith(f"_{key}") or f"_{key}_" in cand_lower or cand_lower.endswith(f".{key}"):
+                smart_match = cand
+                break
+
+        # Match 2: check aliases if still not found
+        if smart_match == DEFAULT_CREATE_NEW:
+            for alias in aliases.get(key, []):
+                for cand in candidates:
+                    if alias in cand.lower():
+                        smart_match = cand
+                        break
+                if smart_match != DEFAULT_CREATE_NEW:
+                    break
+
+        options = [DEFAULT_CREATE_NEW] + candidates
+        results[key] = (options, smart_match)
+
+    return results
 
 
 async def validate_input(hass: Any, data: dict[str, Any]) -> dict[str, Any]:
@@ -70,6 +127,17 @@ class FoxessModernConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        """Initialize the config flow."""
+        self._user_input: dict[str, Any] = {}
+        self._title: str = ""
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Get the options flow for this handler."""
+        return FoxessModernOptionsFlow(config_entry)
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -77,7 +145,6 @@ class FoxessModernConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Check unique ID based on host + port + unit_id
             unique_id = f"{user_input[CONF_HOST]}_{user_input[CONF_PORT]}_{user_input[CONF_UNIT_ID]}"
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
@@ -90,12 +157,94 @@ class FoxessModernConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
+                if user_input.get(CONF_MIGRATE):
+                    self._user_input = dict(user_input)
+                    self._title = info["title"]
+                    return await self.async_step_migration_mapping()
+
                 return self.async_create_entry(title=info["title"], data=user_input)
+
+        has_legacy = bool(self.hass.config_entries.async_entries(LEGACY_DOMAIN))
+        user_schema = vol.Schema(
+            {
+                vol.Required(CONF_HOST): str,
+                vol.Required(CONF_PORT, default=DEFAULT_PORT): int,
+                vol.Required(CONF_UNIT_ID, default=DEFAULT_UNIT_ID): int,
+                vol.Required(CONF_MODEL, default=DEFAULT_MODEL): vol.In(SUPPORTED_MODELS),
+                vol.Optional(CONF_MIGRATE, default=has_legacy): bool,
+            }
+        )
 
         return self.async_show_form(
             step_id="user",
-            data_schema=STEP_USER_DATA_SCHEMA,
+            data_schema=user_schema,
             errors=errors,
+        )
+
+    async def async_step_migration_mapping(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle legacy sensor mapping step."""
+        if user_input is not None:
+            mappings = {
+                k: v for k, v in user_input.items()
+                if v and v != DEFAULT_CREATE_NEW
+            }
+            self._user_input[CONF_MAPPINGS] = mappings
+            return self.async_create_entry(
+                title=self._title,
+                data=self._user_input,
+            )
+
+        entity_reg = er.async_get(self.hass)
+        matches = find_smart_matches(entity_reg)
+
+        schema_dict: dict[Any, Any] = {}
+        for key, _label, _platform in MIGRATABLE_KEYS:
+            options, default_val = matches[key]
+            schema_dict[vol.Optional(key, default=default_val)] = vol.In(options)
+
+        return self.async_show_form(
+            step_id="migration_mapping",
+            data_schema=vol.Schema(schema_dict),
+        )
+
+
+class FoxessModernOptionsFlow(OptionsFlow):
+    """Handle options flow for FoxESS Modern."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize options flow."""
+        self._config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage FoxESS Modern options."""
+        if user_input is not None:
+            mappings = {
+                k: v for k, v in user_input.items()
+                if v and v != DEFAULT_CREATE_NEW
+            }
+            return self.async_create_entry(title="", data={CONF_MAPPINGS: mappings})
+
+        entity_reg = er.async_get(self.hass)
+        matches = find_smart_matches(entity_reg)
+        current_mappings = self._config_entry.options.get(
+            CONF_MAPPINGS, self._config_entry.data.get(CONF_MAPPINGS, {})
+        )
+
+        schema_dict: dict[Any, Any] = {}
+        for key, _label, _platform in MIGRATABLE_KEYS:
+            options, smart_default = matches[key]
+            current_val = current_mappings.get(key, smart_default)
+            if current_val not in options:
+                options = [current_val] + options
+            schema_dict[vol.Optional(key, default=current_val)] = vol.In(options)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(schema_dict),
         )
 
 

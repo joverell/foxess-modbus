@@ -10,6 +10,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import FoxessConfigEntry
+from .const import CONF_MAPPINGS
 from .coordinator import FoxessDataUpdateCoordinator
 from .device.const import WorkMode
 
@@ -30,8 +31,15 @@ async def async_setup_entry(
     coordinator = entry.runtime_data.settings_coordinator
     device = entry.runtime_data.device
     serial = str(entry.unique_id)
+    mappings: dict[str, str] = entry.options.get(
+        CONF_MAPPINGS, entry.data.get(CONF_MAPPINGS, {})
+    )
+    mapped_id = mappings.get("work_mode")
+    suggested_id = mapped_id.split(".", 1)[-1] if mapped_id else None
 
-    async_add_entities([FoxessWorkModeSelect(coordinator, device, serial)])
+    async_add_entities([
+        FoxessWorkModeSelect(coordinator, device, serial, suggested_object_id=suggested_id)
+    ])
 
 
 class FoxessWorkModeSelect(CoordinatorEntity[FoxessDataUpdateCoordinator], SelectEntity):
@@ -39,13 +47,21 @@ class FoxessWorkModeSelect(CoordinatorEntity[FoxessDataUpdateCoordinator], Selec
 
     _attr_options = list(_WORK_MODE_OPTIONS.keys())
 
-    def __init__(self, coordinator: FoxessDataUpdateCoordinator, device: Any, serial: str) -> None:
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        suggested_object_id: str | None = None,
+    ) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator)
         self._device = device
         self._attr_unique_id = f"{serial}_work_mode"
         self._attr_name = "Work Mode"
         self._attr_device_info = coordinator.device_info
+        if suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def current_option(self) -> str | None:
