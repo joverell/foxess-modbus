@@ -13,4 +13,4 @@ class FoxessComponent(Component):
     FIFO buffers, so keeping this bounded (e.g. 32 registers) prevents stalls.
     """
 
-    max_span = 32
+    max_span = 8

@@ -42,7 +42,7 @@ class ResilientModbusUnit:
         self._lock = asyncio.Lock()
         self._sock: socket.socket | None = None
         self._connected = False
-        self._spacing = 0.05
+        self._spacing = 0.12
         self._last_request_time = 0.0
         self._conn_lost_callbacks: list[Callable[[], None]] = []
 
@@ -136,7 +136,7 @@ class ResilientModbusUnit:
             except Exception as e:
                 last_err = e
                 self._close_socket()
-                time.sleep(0.1 * (attempt + 1))
+                time.sleep(0.25 * (attempt + 1))
 
         raise TimeoutError(f"Failed to read fc={fc} addr={address} count={count}: {last_err}")
 

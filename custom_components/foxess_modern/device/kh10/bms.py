@@ -14,7 +14,8 @@ class FoxessKH10BMS(FoxessComponent):
     """
 
     register_space = "holding"
-    max_gap = 0
+    max_gap = 4
+    max_span = 8
 
     bms_cell_temp_high = gauge(37617, 0.1, signed=True, unit="°C")
     bms_cell_temp_low = gauge(37618, 0.1, signed=True, unit="°C")

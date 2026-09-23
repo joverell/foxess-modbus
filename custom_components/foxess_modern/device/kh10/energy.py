@@ -15,7 +15,8 @@ class FoxessKH10Energy(FoxessComponent):
     """
 
     register_space = "holding"
-    max_gap = 0
+    max_gap = 1
+    max_span = 10
 
     # Solar generation (kWh)
     solar_energy_total = uint32(32000, scale=0.1, unit="kWh")

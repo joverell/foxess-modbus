@@ -40,6 +40,7 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[None]):
         self.entry = entry
         self.device = device
         self._update_method = update_method
+        self._consecutive_failures = 0
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -55,7 +56,16 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[None]):
         """Fetch the latest data from the inverter."""
         try:
             report = await self._update_method()
+            self._consecutive_failures = 0
             if report.failed:
                 _LOGGER.warning("Partial read notice from FoxESS: %s", report.failed)
         except Exception as err:
+            self._consecutive_failures += 1
+            if self._consecutive_failures < 3:
+                _LOGGER.warning(
+                    "Transient communication error with FoxESS (attempt %d/3): %s",
+                    self._consecutive_failures,
+                    err,
+                )
+                return
             raise UpdateFailed(f"Error communicating with FoxESS: {err}") from err
