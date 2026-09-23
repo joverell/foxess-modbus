@@ -29,7 +29,11 @@ To integrate the inverter with Home Assistant without cloud dependence, an indus
 
 ## 2. Inverter Physical Port Pinouts: AUX vs. METER
 
-On the underside of FoxESS inverters (specifically the **KH** and **H1** series), you will find multiple RJ45 sockets. The two most prominent are labeled **METER** and **AUX** (or **COM**).
+Depending on your specific FoxESS inverter series and hardware revision, communication wiring is terminated either via a standard **RJ45 port** or a **16-pin push-in terminal plug**.
+
+### 2.1 RJ45 Modular Connector Option
+
+Found on H1, H3, H3-Pro, and certain KH revisions:
 
 ```text
 RJ45 Connector Pinout (Pin 1 on far left, clip facing down/away):
@@ -48,14 +52,59 @@ RJ45 Connector Pinout (Pin 1 on far left, clip facing down/away):
 
 ---
 
-### The Critical Port Distinction: Why METER Port Will Fail
+### 2.2 16-Pin Multi-Connector Plug (KH Series)
+
+Many KH hybrid installations use a multi-pin push-in connector (black body with orange spring-release buttons) on the underside of the inverter:
+
+```text
+16-Pin Communication Plug (Looking directly at connector face):
+
+TOP ROW:     [ 1 ]        [ 2 ]        [ 3 ]        [ 4 ]        [ 5 ]
+          Meter485A    Meter485B       485B         485A         CT2+
+           (Master)     (Master)     (Slave B-)   (Slave A+)
+                                         │            │
+                                  [To Waveshare] [To Waveshare]
+                                       B/R          A/T
+
+MIDDLE ROW:  [ 11 ]       [ 10 ]       [ 9 ]        [ 8 ]        [ 7 ]        [ 6 ]
+              K2           K1           /           CT1+         CT1-         CT2-
+                                                  (Grid CT)    (Grid CT)
+                                                     │            │
+                                                [To CT Clamp] [To CT Clamp]
+
+BOTTOM ROW:  [ 12 ]       [ 13 ]       [ 14 ]       [ 15 ]       [ 16 ]
+              K3           K4           /            DI          COM
+```
+
+| Pin | Function | Hardware Role | Destination / Cable Connection |
+| :--- | :--- | :--- | :--- |
+| **1** | `Meter485A` | Inverter Master (RS-485 Data+) | Physical energy meter (e.g. DDSU666 / SDM230) |
+| **2** | `Meter485B` | Inverter Master (RS-485 Data-) | Physical energy meter (e.g. DDSU666 / SDM230) |
+| **3** | **`485B`** | **Inverter Slave (RS-485 Data-)** | **Waveshare `B/R` terminal** (Home Assistant) |
+| **4** | **`485A`** | **Inverter Slave (RS-485 Data+)** | **Waveshare `A/T` terminal** (Home Assistant) |
+| **5** | `CT2+` | Secondary CT (Positive) | Optional second solar inverter clamp |
+| **6** | `CT2-` | Secondary CT (Negative) | Optional second solar inverter clamp |
+| **7** | **`CT1-`** | **Grid CT Clamp (Negative)** | **Main grid CT clamp** |
+| **8** | **`CT1+`** | **Grid CT Clamp (Positive)** | **Main grid CT clamp** |
+| **9–16** | Relay / DRM / DI | Control Signals | Demand response (DRM) or heat pump contacts |
+
+#### Multi-Conductor Cable Terminations
+Installers frequently route a single multi-conductor cable between the switchboard and the inverter:
+* **Pins 7 & 8:** Dedicated to the grid CT clamp for load measurement.
+* **Pins 3 & 4:** Dedicated to the RS-485 Modbus bridge for Home Assistant communication.
+
+Even when these pairs share the same outer cable sheath, they terminate at completely separate, electrically isolated pin positions on the plug.
+
+---
+
+### 2.3 The Critical Port Distinction: Why Meter Pins Will Fail
 
 > [!CAUTION]
-> **DO NOT connect your Home Assistant gateway to the METER port.**
+> **DO NOT connect your Home Assistant gateway to the Meter pins (Pins 1 & 2).**
 >
-> * **METER Port = Hardware Master:** The FoxESS internal CPU is hardcoded in firmware to act as an **RS-485 Master** on the METER port. It continuously broadcasts polling frames every 100–200 ms to read an external CT energy meter (e.g. Chint DDSU666 or Eastron SDM230) for zero-export and home load tracking.
-> * **Electrical Bus Collisions:** RS-485 (EIA-485) is an electrical standard that supports only **one master** at a time. If you wire your Home Assistant bridge into the METER port, Home Assistant and the Inverter CPU will both attempt to drive +/- 5V differential signals onto the same copper pair simultaneously. This creates electrical signal contention, corrupted CRC checksums, and communication fault alarms on the inverter display.
-> * **AUX Port = Hardware Slave (Unit ID 247):** The AUX port is explicitly configured as a **Modbus Slave**. The inverter remains silent and only responds when spoken to. Home Assistant is the sole Master on this bus.
+> * **Meter Port = Hardware Master:** The FoxESS internal CPU is programmed in firmware to act as an RS-485 Master on the Meter pins. It continuously broadcasts polling frames every 100 to 200 ms to read an external energy meter.
+> * **Electrical Bus Collisions:** RS-485 (EIA-485) supports only one master at a time. If you wire your Home Assistant bridge into Pins 1 & 2, Home Assistant and the Inverter CPU will both drive signals onto the same copper pair at the same time. This creates electrical signal collisions, corrupted checksums, and communication fault alarms on the inverter display.
+> * **AUX / 485 Pins = Hardware Slave (Unit ID 247):** Pins 3 & 4 (or the dedicated AUX RJ45 port) operate as a Modbus Slave. The inverter remains silent and only responds when spoken to by Home Assistant.
 
 #### What About Multiple Slaves on the AUX Bus?
 If you have multiple Modbus slave devices (e.g., an Eastron meter on Slave ID 1 and the FoxESS inverter on Slave ID 247) sharing the same RS-485 gateway, Home Assistant's native connection broker (`modbus-connection`) sequences all requests cleanly, preventing collisions between integrations.
@@ -179,24 +228,25 @@ STARTUP SEQUENCE (REVERSE ORDER):
 
 ---
 
-## 6. How `foxess_modern` Prevents Inverter Lockups
+## 6. How `foxess_modern` Safeguards Inverter Communication
 
-To ensure homeowners never have to endure a whole-house solar shutdown, `foxess_modern` was built specifically around the architectural guidelines in [Modernizing Modbus in Home Assistant](https://developers.home-assistant.io/blog/2026/07/05/modernizing-modbus/):
+To maintain high reliability across different network environments (especially over wireless bridges or noisy multi-core cable runs), `foxess_modern` adopts the architectural patterns established in [Modernizing Modbus in Home Assistant](https://developers.home-assistant.io/blog/2026/07/05/modernizing-modbus/):
 
-1. **Strict Register Grouping (`max_span = 32`):**
-   * Instead of sending dozens of individual Modbus queries, `foxess_modern` groups contiguous registers into compact spans capped at 32 registers.
-   * Telemetry is captured in just **2 to 3 brief transactions**, keeping the serial bus idle >90% of the time and preventing the inverter's UART FIFO buffer from overflowing.
+1. **Defensive Register Grouping (`max_span = 32`):**
+   * Rather than issuing dozens of separate single-register queries, `foxess_modern` groups contiguous registers into compact spans capped at 32 registers.
+   * Telemetry is gathered in just 2 or 3 quick transactions. This keeps the serial bus clear for the vast majority of each polling cycle, preventing buffer saturation on sensitive microcontrollers or latency-prone wireless bridges.
+   * Note: While certain hardwired, direct-serial installations can handle wider register spans, limiting transactions to 32 registers represents a proven, defensive default that ensures stability across diverse real-world environments.
 
-2. **Hardware Rest Periods (`message_spacing = 80ms`):**
-   * An enforced 80 ms inter-frame spacing guarantees the FoxESS microcontroller has time to process and clear its buffer before the next packet arrives.
+2. **Inter-Frame Timing Safeguards (`message_spacing = 80ms`):**
+   * Enforces an 80 ms rest interval between consecutive Modbus transactions, giving the inverter processor and the gateway transceiver sufficient time to clear their receive buffers.
 
 3. **Coordinated Write Locking (`modbus-connection`):**
-   * All read and write operations pass through an asynchronous queue broker.
-   * When you change an inverter setting (Work Mode, Min SoC, Force Charge), the broker waits for any active read to finish, holds subsequent reads, and executes the write cleanly. This prevents packet collisions on the half-duplex wire.
+   * All read and write operations pass through Home Assistant's central asynchronous queue broker.
+   * When an automation or UI entity updates a setting (such as Work Mode or Min SoC), the broker waits for any active read transaction to complete, holds subsequent reads, and executes the write cleanly. This prevents packet collisions on the half-duplex line.
 
 4. **Staggered Polling Cycles:**
-   * Dynamic telemetry (power, voltage, SoC) polls every **15 seconds** (`SCAN_INTERVAL = 15`).
-   * Static settings (configured Min SoC, charge windows) poll every **60 seconds** (`SETTINGS_SCAN_INTERVAL = 60`).
+   * Dynamic operational readings (power, voltage, SoC) poll every 15 seconds (`SCAN_INTERVAL = 15`).
+   * Configuration parameters (configured Min SoC, charge windows) poll every 60 seconds (`SETTINGS_SCAN_INTERVAL = 60`).
 
 ---
 
