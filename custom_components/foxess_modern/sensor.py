@@ -34,11 +34,15 @@ from .coordinator import FoxessDataUpdateCoordinator
 from .migration import adopt_legacy_entity_id
 
 
-def format_version(val: Any) -> str | None:
-    """Format numeric firmware version into decimal string (e.g. 133 -> 1.33)."""
+def format_version(val: Any, is_hex: bool = False) -> str | None:
+    """Format numeric firmware version into version string (e.g. 0x0164 -> 1.64 or 133 -> 1.33)."""
     if val is None:
         return None
     if isinstance(val, int):
+        if is_hex:
+            major = val >> 8
+            minor = val & 0xFF
+            return f"{major:X}.{minor:02X}"
         return f"{val // 100}.{val % 100:02d}"
     return str(val)
 
@@ -48,6 +52,20 @@ class FoxessSensorDescription(SensorEntityDescription):
     """Describes a FoxESS sensor entity."""
 
     value_fn: Callable[[Any], Any]
+
+
+INVERTER_STATE_OPTIONS: list[str] = [
+    "Self Test",
+    "Waiting",
+    "Checking",
+    "On Grid",
+    "Off Grid / EPS",
+    "Recoverable Fault",
+    "Unrecoverable Fault",
+    "Standby",
+    "Fault",
+    "Unknown",
+]
 
 
 # Base sensors present across all supported FoxESS hybrid inverters
@@ -196,7 +214,8 @@ BASE_SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         key="inverter_state",
         name="Inverter State",
         device_class=SensorDeviceClass.ENUM,
-        value_fn=lambda dev: str(dev.inverter.state) if dev.inverter.state is not None else None,
+        options=INVERTER_STATE_OPTIONS,
+        value_fn=lambda dev: str(dev.inverter.state) if getattr(dev.inverter, "state", None) is not None else None,
     ),
     FoxessSensorDescription(
         key="connection_status",
@@ -208,19 +227,28 @@ BASE_SENSOR_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         key="master_version",
         name="Master Firmware Version",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda dev: format_version(getattr(dev.inverter, "master_version", None)),
+        value_fn=lambda dev: format_version(
+            getattr(dev.inverter, "master_version", None),
+            is_hex=getattr(dev.inverter, "version_is_hex", False),
+        ),
     ),
     FoxessSensorDescription(
         key="slave_version",
         name="Slave Firmware Version",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda dev: format_version(getattr(dev.inverter, "slave_version", None)),
+        value_fn=lambda dev: format_version(
+            getattr(dev.inverter, "slave_version", None),
+            is_hex=getattr(dev.inverter, "version_is_hex", False),
+        ),
     ),
     FoxessSensorDescription(
         key="manager_version",
         name="Manager Firmware Version",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda dev: format_version(getattr(dev.inverter, "manager_version", None)),
+        value_fn=lambda dev: format_version(
+            getattr(dev.inverter, "manager_version", None),
+            is_hex=getattr(dev.inverter, "version_is_hex", False),
+        ),
     ),
 )
 

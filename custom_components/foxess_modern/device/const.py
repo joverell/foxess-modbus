@@ -1,6 +1,6 @@
 """Constants and Enums for FoxESS Modbus."""
 
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 
 
 class WorkMode(IntEnum):
@@ -11,12 +11,16 @@ class WorkMode(IntEnum):
     BACK_UP = 2
 
 
-class InverterState(IntEnum):
-    """FoxESS KH inverter operational state codes."""
+class InverterState(StrEnum):
+    """FoxESS inverter operational states."""
 
-    WAITING = 0
-    CHECKING = 1
-    ON_GRID = 2
-    OFF_GRID = 3
-    FAULT = 4
-    PERMANENT_FAULT = 5
+    SELF_TEST = "Self Test"
+    WAITING = "Waiting"
+    CHECKING = "Checking"
+    ON_GRID = "On Grid"
+    OFF_GRID = "Off Grid / EPS"
+    RECOVERABLE_FAULT = "Recoverable Fault"
+    UNRECOVERABLE_FAULT = "Unrecoverable Fault"
+    STANDBY = "Standby"
+    FAULT = "Fault"
+    UNKNOWN = "Unknown"

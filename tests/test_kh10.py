@@ -56,10 +56,10 @@ def kh10_unit():
         # Inverter health
         31018: 425,   # Inverter Temp: 42.5 °C
         31019: 230,   # Ambient Temp: 23.0 °C
-        31027: 2,     # State: On-grid (2)
-        36001: 133,   # Master version: 1.33
-        36002: 100,   # Slave version: 1.00
-        36003: 115,   # Manager version: 1.15
+        31027: 3,     # State: On Grid (3 on KH)
+        36001: 0x0169, # Master version: 1.69
+        36002: 0x0103, # Slave version: 1.03
+        36003: 0x0164, # Manager version: 1.64
 
         # Control registers
         41000: 0,     # Work mode: Self Use (0)
@@ -133,6 +133,10 @@ async def test_kh10_settings(kh10_unit):
     assert inverter.control.work_mode == WorkMode.SELF_USE
     assert inverter.control.min_soc == 10
     assert inverter.control.max_soc == 100
+    assert "versions" in report.updated
+    assert inverter.inverter.master_version == 0x0169
+    assert inverter.inverter.slave_version == 0x0103
+    assert inverter.inverter.manager_version == 0x0164
 
 
 @pytest.mark.asyncio
