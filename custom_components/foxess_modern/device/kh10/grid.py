@@ -8,13 +8,20 @@ from ..model import FoxessComponent
 
 
 class FoxessKH10Grid(FoxessComponent):
-    """Grid telemetry and CT meter measurements on FoxESS KH10."""
+    """Grid telemetry and CT meter measurements on FoxESS KH10.
+
+    register_ranges limits spans to <= 8 registers per frame, protecting
+    the FoxESS AUX microcontroller UART FIFO buffer from overflowing.
+    """
+
+    register_space = "holding"
+    register_ranges = ((31006, 31013), (31014, 31016), (39168, 39169))
+    max_span = 8
 
     voltage = gauge(31006, 0.1, signed=False, unit="V")
     current = gauge(31007, 0.1, signed=False, unit="A")
     inverter_power = gauge(31008, 1.0, signed=True, unit="W")
     frequency = gauge(31009, 0.01, signed=False, unit="Hz")
-    load_power = gauge(31016, 1.0, signed=True, unit="W")
 
     # EPS (Emergency Power Supply) telemetry
     eps_voltage = gauge(31010, 0.1, signed=False, unit="V")
@@ -23,12 +30,13 @@ class FoxessKH10Grid(FoxessComponent):
     eps_frequency = gauge(31013, 0.01, signed=False, unit="Hz")
     eps_reactive_power = gauge(31014, 1.0, signed=True, unit="var")
 
+    # Secondary CT meter (e.g. external PV or generator)
+    ct2_power = gauge(31015, -1.0, signed=True, unit="W")
+    load_power = gauge(31016, 1.0, signed=True, unit="W")
+
     # 32-bit signed CT meter power in Watts (register 39168=high word, 39169=low word)
     # Positive = export to grid, Negative = import from grid
     ct_meter_power = int32(39168, unit="W")
-
-    # Secondary CT meter (e.g. external PV or generator)
-    ct2_power = gauge(31015, -1.0, signed=True, unit="W")
 
     @property
     def grid_import_power(self) -> float:
