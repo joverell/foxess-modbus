@@ -156,7 +156,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
     unit_id = entry.data[CONF_UNIT_ID]
     serial = entry.unique_id or f"{host}_{port}_{unit_id}"
 
-    unit = async_get_modbus_unit(hass, entry, host=host, port=port, unit_id=unit_id)
+    unit = ResilientModbusUnit(host=host, port=port, unit_id=unit_id)
     device = create_inverter(unit, serial_number=serial, model=entry.data.get("model"))
 
     scan_interval = entry.options.get(
