@@ -103,13 +103,13 @@ To maintain a clean, user-focused overview on the front page, technical implemen
 ## Python Library Installation
 
 ```bash
-pip install "foxess-modbus"
+pip install "foxess-modern"
 ```
 
 To include the high-performance async `tmodbus` backend:
 
 ```bash
-pip install "foxess-modbus[tmodbus]"
+pip install "foxess-modern[tmodbus]"
 ```
 
 ---
