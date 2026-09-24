@@ -51,8 +51,8 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
     @property
     def is_available(self) -> bool:
         """Return True if coordinator successfully updated data or within transient tolerance."""
-        if self._is_fast_poll and self._timeouts < 2 and self.data is not None:
-            # Tolerate a single transient poll timeout on Wi-Fi without flapping entity availability
+        if self._timeouts < 2 and self.data is not None:
+            # Tolerate transient poll timeouts on Wi-Fi without flapping entity availability
             return True
         return self.last_update_success
 
@@ -80,25 +80,23 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
         try:
             report: UpdateReport = await self._update_method()
         except ModbusTimeoutError as err:
-            if self._is_fast_poll:
-                self._timeouts += 1
-                if self._timeouts >= 3:
-                    # Serial-to-network bridge wedged, recycle link
-                    unit = getattr(self.device, "modbus_unit", None)
-                    if unit and hasattr(unit, "disconnect"):
-                        _LOGGER.warning(
-                            "Link unresponsive after %d consecutive timeouts: recycling Modbus connection",
-                            self._timeouts,
-                        )
-                        await unit.disconnect()
+            self._timeouts += 1
+            if self._timeouts >= 3:
+                # Serial-to-network bridge wedged, recycle link
+                unit = getattr(self.device, "modbus_unit", None)
+                if unit and hasattr(unit, "disconnect"):
+                    _LOGGER.warning(
+                        "Link unresponsive after %d consecutive timeouts: recycling Modbus connection",
+                        self._timeouts,
+                    )
+                    await unit.disconnect()
             raise UpdateFailed(str(err)) from err
         except ModbusError as err:
             raise UpdateFailed(str(err)) from err
         except Exception as err:
             raise UpdateFailed(f"Unexpected error communicating with FoxESS: {err}") from err
 
-        if self._is_fast_poll:
-            self._timeouts = 0
+        self._timeouts = 0
 
         if not report.updated:
             errors = list(report.failed.values())

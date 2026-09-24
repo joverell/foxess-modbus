@@ -237,8 +237,8 @@ To maintain high reliability across different network environments (especially o
    * Telemetry is gathered in small, predictable transactions. This keeps the serial bus clear and strictly prevents buffer saturation on FoxESS AUX UART microcontrollers or latency-prone wireless bridges.
    * Note: While certain hardwired, direct-serial installations might technically tolerate wider spans, limiting transactions to 8 registers represents a proven, defensive standard that ensures complete immunity from microcontroller serial lockups across all FoxESS hardware revisions.
 
-2. **Inter-Frame Timing Safeguards (`message_spacing = 80ms`):**
-   * Enforces an 80 ms rest interval between consecutive Modbus transactions, giving the inverter processor and the gateway transceiver sufficient time to clear their receive buffers.
+2. **Inter-Frame Timing Safeguards (`message_spacing = 250ms`):**
+   * Enforces a 250 ms (`0.25s`) rest interval between consecutive Modbus transactions, giving the inverter AUX microcontroller and the gateway transceiver sufficient decay time to clear their receive buffers.
 
 3. **Coordinated Write Locking (`modbus-connection`):**
    * All read and write operations pass through Home Assistant's central asynchronous queue broker.
@@ -247,6 +247,10 @@ To maintain high reliability across different network environments (especially o
 4. **Staggered Polling Cycles:**
    * Dynamic operational readings (power, voltage, SoC) poll every 15 seconds (`SCAN_INTERVAL = 15`).
    * Configuration parameters (configured Min SoC, charge windows) poll every 60 seconds (`SETTINGS_SCAN_INTERVAL = 60`).
+
+5. **Universal Coordinator Debouncing:**
+   * Wireless gateways located near switchboards or outdoor meter boxes experience occasional dropped Wi-Fi packets or TCP retransmission jitter.
+   * Inverter data in memory remains valid across transient timeouts. Coordinators debounce single poll failures (`self._timeouts < 2 and self.data is not None`), preventing entities like `Export Power Limit`, `Min SoC`, or `Work Mode` from flapping to `Unavailable` during isolated packet drops, while still recycling wedged bridge connections if 3 consecutive timeouts occur.
 
 ---
 

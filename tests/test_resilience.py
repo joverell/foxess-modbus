@@ -91,6 +91,44 @@ async def test_coordinator_timeout_and_recycling():
 
 
 @pytest.mark.asyncio
+async def test_settings_coordinator_debounces_single_timeout():
+    """Verify settings coordinator (slow poll) maintains is_available=True on transient timeout."""
+    hass = MagicMock()
+    entry = MagicMock()
+    entry.unique_id = "test_entry"
+    device = MagicMock()
+    device.model = "KH10"
+
+    # Seed with initial success
+    success_report = UpdateReport(updated={"control"})
+    coordinator = FoxessDataUpdateCoordinator(
+        hass,
+        entry,
+        device,
+        AsyncMock(return_value=success_report),
+        timedelta(seconds=60),
+        is_fast_poll=False,
+    )
+    await coordinator._async_update_data()
+    coordinator.data = success_report
+    assert coordinator.is_available is True
+
+    # Single timeout does not drop is_available
+    coordinator._update_method = AsyncMock(side_effect=ModbusTimeoutError("Wi-Fi drop"))
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+    coordinator.last_update_success = False
+    assert coordinator._timeouts == 1
+    assert coordinator.is_available is True
+
+    # Two consecutive timeouts drop is_available
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+    assert coordinator._timeouts == 2
+    assert coordinator.is_available is False
+
+
+@pytest.mark.asyncio
 async def test_sensor_entity_available_continuity():
     """Verify sensor entity reflects coordinator success and energy sensors remain permanently available."""
     coordinator = MagicMock()

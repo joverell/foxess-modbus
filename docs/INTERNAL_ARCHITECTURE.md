@@ -102,35 +102,48 @@ This guarantees that `modbus-connection`'s read planner will never merge request
 
 ---
 
-## 4. Invariant 3: Official modbus-connection Coordinator Lifecycle
+## 4. Invariant 3: Official modbus-connection Coordinator Lifecycle & Debouncing
 
 ### The Rule
-Manage `DataUpdateCoordinator[UpdateReport]`. Count timeouts on the fast poll coordinator and call `await self.device.modbus_unit.disconnect()` after 3 consecutive dead timeouts. Only raise `UpdateFailed` when no sub-system answered or when the link is lost.
+Manage `DataUpdateCoordinator[UpdateReport]`. Track consecutive timeouts across both fast (`readings_coordinator`) and slow (`settings_coordinator`) polling loops. Debounce transient timeouts (`self._timeouts < 2 and self.data is not None`) so that entity availability does not flap. Recycle the bridge link via `await self.device.modbus_unit.disconnect()` after 3 consecutive dead timeouts. Only raise `UpdateFailed` when no sub-system answered or when the link is lost.
 
 ### Why This Rule Exists
-The official Home Assistant Modbus architecture requires:
-1. When `report.updated` contains refreshed sub-systems, those entities update live. Any sub-system that temporarily dropped a frame lands in `report.failed` without failing the overall poll.
-2. If the bridge wedges and keeps the socket open while the inverter stops answering, `Device.async_poll` propagates `ModbusTimeoutError` when nothing has answered yet. Counting 3 consecutive timeouts in the fast coordinator and calling `await self.device.modbus_unit.disconnect()` recycles the bridge connection cleanly.
-3. Cumulative statistics (`RestoreSensor` with `state_class=TOTAL_INCREASING`) must remain `available = True` so long-term energy history and the Home Assistant Energy Dashboard never have gaps during nightly inverter power-downs.
+1. **Sub-System Fault Isolation**: When `report.updated` contains refreshed sub-systems, those entities update live. Any sub-system that temporarily dropped a frame lands in `report.failed` without failing the overall poll.
+2. **Slow Coordinator Availability Continuity**: `settings_coordinator` polls on a 60-second cycle (`SETTINGS_SCAN_INTERVAL = 60`). If debouncing is only applied to fast poll, a single dropped Wi-Fi packet on the 60-second settings poll causes all configuration entities (`number.export_power_limit`, `number.min_soc`, `select.work_mode`) to flap to `Unavailable` for a full 60 to 120 seconds. Applying `self._timeouts < 2 and self.data is not None` to all coordinators ensures configuration entities remain stable across transient link hiccups.
+3. **Bridge Recycling**: If the serial bridge wedges and keeps the TCP socket open while the inverter stops responding, counting 3 consecutive timeouts and calling `await self.device.modbus_unit.disconnect()` forces the TCP socket to close and re-establish cleanly.
+4. **Cumulative Statistics Continuity**: Cumulative energy sensors (`RestoreSensor` with `state_class=TOTAL_INCREASING`) must maintain `available = True` so long-term energy history and the Home Assistant Energy Dashboard never have gaps during nightly inverter power-downs.
 
 ### The Standard Implementation
 ```python
-async def _async_update_data(self) -> UpdateReport:
+@property
+def is_available(self) -> bool:
+    """Return True if coordinator successfully updated data or within transient tolerance."""
+    if self._timeouts < 2 and self.data is not None:
+        # Tolerate transient poll timeouts on Wi-Fi without flapping entity availability
+        return True
+    return self.last_update_success
+
+async def _do_update_data(self) -> UpdateReport:
+    """Execute update method and handle errors."""
     try:
         report: UpdateReport = await self._update_method()
     except ModbusTimeoutError as err:
-        if self._is_fast_poll:
-            self._timeouts += 1
-            if self._timeouts >= 3:
-                unit = getattr(self.device, "modbus_unit", None)
-                if unit and hasattr(unit, "disconnect"):
-                    await unit.disconnect()
+        self._timeouts += 1
+        if self._timeouts >= 3:
+            unit = getattr(self.device, "modbus_unit", None)
+            if unit and hasattr(unit, "disconnect"):
+                _LOGGER.warning(
+                    "Link unresponsive after %d consecutive timeouts: recycling Modbus connection",
+                    self._timeouts,
+                )
+                await unit.disconnect()
         raise UpdateFailed(str(err)) from err
     except ModbusError as err:
         raise UpdateFailed(str(err)) from err
+    except Exception as err:
+        raise UpdateFailed(f"Unexpected error communicating with FoxESS: {err}") from err
 
-    if self._is_fast_poll:
-        self._timeouts = 0
+    self._timeouts = 0
 
     if not report.updated:
         errors = list(report.failed.values())
@@ -247,7 +260,48 @@ All optional fields, such as `reconfigure_legacy_mappings`, must have explicit l
 
 ---
 
-## 9. Summary Checklist for Code Reviews
+## 9. Invariant 8: Half-Duplex Bus Locking and Frame Spacing
+
+### The Rule
+Enforce complete serialization of all Modbus transactions across all coordinators and UI write commands on the shared RS-485 bus. Maintain a minimum of 250 ms (`message_spacing = 0.25`) inter-frame spacing and configure a minimum 5.0 second timeout for all read blocks.
+
+### Why This Rule Exists
+1. **Half-Duplex Contention**: RS-485 serial communication is inherently half-duplex. If `readings_coordinator` (15s fast poll) and `settings_coordinator` (60s slow poll) attempt to communicate concurrently without locking, packets collide on the serial line, causing corrupted frames and timeout spikes.
+2. **Transceiver Decay & Microcontroller Buffer Overrun**: Serial bridge transceivers (such as MAX485/SP3485) and the FoxESS inverter AUX microcontroller UART require physical recovery time to clear receive buffers and switch between transmit and receive states. An inter-frame spacing of 250 ms prevents FIFO buffer overflow and hardware UART deadlocks.
+3. **Multi-Block Timeout Budgeting**: Because register queries are segmented into blocks of at most 8 registers, a full poll cycle requires sequential block transactions. Sizing Modbus connection timeouts to at least 5.0 seconds provides sufficient margin for sequential multi-block responses over Wi-Fi bridge hops.
+
+### How It Is Enforced
+* Connection leasing via `async_get_unit` shares a single `modbus-connection` unit lease across coordinators.
+* `ModbusConnection` parameters in `device/__init__.py` and fallback connection initializers specify `message_spacing = 0.25` and `timeout = 5.0`.
+* In `coordinator.py`, coordinator updates sequence through `_do_update_data`, ensuring bus queries are dispatched sequentially.
+
+---
+
+## 10. Invariant 9: PyPI Distribution Package Naming (foxess-modern)
+
+### The Rule
+The standalone PyPI library distribution package name is `foxess-modern`, while the internal Python import namespace remains `foxess_modbus`.
+
+### Why This Rule Exists
+1. **Namespace Collision Avoidance**: The package name `foxess-modbus` is already registered on the public PyPI index by legacy publishers.
+2. **Trusted Publisher Alignment**: Automated deployment via GitHub Actions uses PyPI Trusted Publishing configured for project `foxess-modern`.
+3. **Import Compatibility**: The internal module namespace `foxess_modbus` is retained in `src/foxess_modbus/` to maintain clean separation between the packaging distribution name and code imports.
+
+### Configuration
+In `pyproject.toml`:
+```toml
+[project]
+name = "foxess-modern"
+```
+And package discovery:
+```toml
+[tool.setuptools.packages.find]
+where = ["src"]
+```
+
+---
+
+## 11. Summary Checklist for Code Reviews
 
 Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Does the change use Core Modbus unit leasing (`async_get_unit`) with fallback to `modbus_connection.tmodbus.ModbusConnection`?
@@ -255,8 +309,11 @@ Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Is `message_spacing` kept at `0.25` (250ms RS-485 transceiver decay)?
 * [ ] Does `FoxessDevice` inherit `Device.async_poll` directly without overriding?
 * [ ] Does the coordinator recycle the bridge via `self.device.modbus_unit.disconnect()` after 3 consecutive dead timeouts?
+* [ ] Is `is_available` debounced (`self._timeouts < 2 and self.data is not None`) across all coordinators?
 * [ ] Do cumulative energy sensors (`RestoreSensor`) maintain `available = True`?
 * [ ] Are power entities (`W`) and energy entities (`kWh`) strictly separated in migration aliases?
 * [ ] Does the options flow use `SelectSelector` with string values and pre-selected defaults?
+* [ ] Is the PyPI distribution package name configured as `foxess-modern`?
 * [ ] Are `src/foxess_modbus/` and `custom_components/foxess_modern/device/` 100% synchronized via `python scripts/vendor.py --check`?
 * [ ] Do all tests in `pytest tests/` pass?
+
