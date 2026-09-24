@@ -10,6 +10,7 @@ and its asynchronous tmodbus transport backend, providing:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 5.0
-DEFAULT_MESSAGE_SPACING = 0.1  # 100ms RS-485 bus pacing for FoxESS AUX UART
+DEFAULT_MESSAGE_SPACING = 0.25  # 250ms RS-485 bus pacing for FoxESS AUX UART transceiver line decay
 DEFAULT_CONNECT_DELAY = 0.05   # 50ms transceiver line stabilization
 
 
@@ -61,6 +62,7 @@ class ResilientModbusUnit:
         self.port = port
         self.unit_id = unit_id
         self.timeout = timeout
+        self.bus_lock = asyncio.Lock()
 
         self._params = ModbusTcpParams(host=host, port=port)
         self._connection = ModbusConnection(

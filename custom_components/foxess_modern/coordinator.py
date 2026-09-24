@@ -68,7 +68,15 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
         )
 
     async def _async_update_data(self) -> UpdateReport:
-        """Fetch the latest data from the inverter."""
+        """Fetch the latest data from the inverter, serialized via bus_lock."""
+        bus_lock = getattr(getattr(self.device, "modbus_unit", None), "bus_lock", None)
+        if bus_lock is not None:
+            async with bus_lock:
+                return await self._do_update_data()
+        return await self._do_update_data()
+
+    async def _do_update_data(self) -> UpdateReport:
+        """Execute update method and handle errors."""
         try:
             report: UpdateReport = await self._update_method()
         except ModbusTimeoutError as err:

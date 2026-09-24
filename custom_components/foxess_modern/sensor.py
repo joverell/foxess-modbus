@@ -949,7 +949,7 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
         if self.entity_description.key == "connection_status":
             unit = getattr(self._device, "modbus_unit", None)
             is_connected = bool(getattr(unit, "connected", False)) if unit else False
-            return "Connected" if (is_connected and self.coordinator.last_update_success) else "Disconnected"
+            return "Connected" if (is_connected and self.coordinator.is_available) else "Disconnected"
         return self.entity_description.value_fn(self._device)
 
 

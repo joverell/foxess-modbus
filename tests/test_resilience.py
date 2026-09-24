@@ -119,3 +119,40 @@ async def test_sensor_entity_available_continuity():
         serial="serial_123",
     )
     assert energy_sensor.available is True
+
+
+@pytest.mark.asyncio
+async def test_connection_pacing_and_bus_lock():
+    """Verify DEFAULT_MESSAGE_SPACING is 250ms and ResilientModbusUnit provides a bus_lock."""
+    from custom_components.foxess_modern.connection import (
+        DEFAULT_MESSAGE_SPACING,
+        ResilientModbusUnit,
+    )
+    assert DEFAULT_MESSAGE_SPACING == 0.25
+
+    with patch("custom_components.foxess_modern.connection.ModbusConnection"):
+        unit = ResilientModbusUnit("127.0.0.1", 502, 247)
+        assert hasattr(unit, "bus_lock")
+        assert isinstance(unit.bus_lock, asyncio.Lock)
+
+
+@pytest.mark.asyncio
+async def test_connection_status_sensor_debouncing():
+    """Verify connection_status entity relies on coordinator.is_available (debounced)."""
+    coordinator = MagicMock()
+    coordinator.last_update_success = False  # transient single poll failure
+    coordinator.is_available = True         # debounced within tolerance
+    coordinator.device_info = MagicMock()
+
+    conn_desc = next(d for d in BASE_SENSOR_DESCRIPTIONS if d.key == "connection_status")
+    dev = MagicMock()
+    dev.modbus_unit.connected = True
+
+    entity = FoxessSensorEntity(coordinator, conn_desc, dev, "serial_123")
+    # Should report Connected while within debounce window even if last_update_success is False
+    assert entity.native_value == "Connected"
+
+    # Sustained outage marks coordinator unavailable
+    coordinator.is_available = False
+    assert entity.native_value == "Disconnected"
+

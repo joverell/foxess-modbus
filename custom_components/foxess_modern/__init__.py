@@ -67,10 +67,18 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         duration = int(call.data.get("duration", 3600))
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                await entry.runtime_data.device.async_set_force_charge(
-                    power_w=power, max_soc=max_soc, timeout_sec=duration
-                )
-                await entry.runtime_data.settings_coordinator.async_request_refresh()
+                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                if bus_lock is not None:
+                    async with bus_lock:
+                        await entry.runtime_data.device.async_set_force_charge(
+                            power_w=power, max_soc=max_soc, timeout_sec=duration
+                        )
+                        await entry.runtime_data.settings_coordinator.async_request_refresh()
+                else:
+                    await entry.runtime_data.device.async_set_force_charge(
+                        power_w=power, max_soc=max_soc, timeout_sec=duration
+                    )
+                    await entry.runtime_data.settings_coordinator.async_request_refresh()
 
     async def async_handle_set_force_discharge(call: ServiceCall) -> None:
         """Handle force discharge service call."""
@@ -79,17 +87,31 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         duration = int(call.data.get("duration", 3600))
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                await entry.runtime_data.device.async_set_force_discharge(
-                    power_w=power, min_soc=min_soc, timeout_sec=duration
-                )
-                await entry.runtime_data.settings_coordinator.async_request_refresh()
+                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                if bus_lock is not None:
+                    async with bus_lock:
+                        await entry.runtime_data.device.async_set_force_discharge(
+                            power_w=power, min_soc=min_soc, timeout_sec=duration
+                        )
+                        await entry.runtime_data.settings_coordinator.async_request_refresh()
+                else:
+                    await entry.runtime_data.device.async_set_force_discharge(
+                        power_w=power, min_soc=min_soc, timeout_sec=duration
+                    )
+                    await entry.runtime_data.settings_coordinator.async_request_refresh()
 
     async def async_handle_clear_overrides(call: ServiceCall) -> None:
         """Handle clear overrides service call."""
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                await entry.runtime_data.device.async_clear_overrides()
-                await entry.runtime_data.settings_coordinator.async_request_refresh()
+                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                if bus_lock is not None:
+                    async with bus_lock:
+                        await entry.runtime_data.device.async_clear_overrides()
+                        await entry.runtime_data.settings_coordinator.async_request_refresh()
+                else:
+                    await entry.runtime_data.device.async_clear_overrides()
+                    await entry.runtime_data.settings_coordinator.async_request_refresh()
 
     async def async_handle_set_work_mode(call: ServiceCall) -> None:
         """Handle set work mode service call."""
@@ -102,8 +124,14 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         mode = mode_map.get(mode_str, WorkMode.SELF_USE)
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                await entry.runtime_data.device.async_set_work_mode(mode)
-                await entry.runtime_data.settings_coordinator.async_request_refresh()
+                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                if bus_lock is not None:
+                    async with bus_lock:
+                        await entry.runtime_data.device.async_set_work_mode(mode)
+                        await entry.runtime_data.settings_coordinator.async_request_refresh()
+                else:
+                    await entry.runtime_data.device.async_set_work_mode(mode)
+                    await entry.runtime_data.settings_coordinator.async_request_refresh()
 
     hass.services.async_register(
         DOMAIN, SERVICE_SET_FORCE_CHARGE, async_handle_set_force_charge

@@ -12,7 +12,7 @@ class FoxessKH10Control(FoxessComponent):
     """Writable configuration, work modes, and remote power limits."""
 
     register_space = "holding"
-    max_gap = 0
+    max_gap = 2
 
     raw_work_mode = integer(41000, writable=True)
     max_charge_current = gauge(41007, 0.1, signed=False, writable=True, unit="A")
