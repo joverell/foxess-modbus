@@ -11,6 +11,7 @@ and its asynchronous tmodbus transport backend, providing:
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import logging
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -45,9 +46,10 @@ def create_connection(
 
 
 class ResilientModbusUnit:
-    """Manages connection and unit operations via modbus_connection.tmodbus.
+    """Manages connection and unit operations via modbus_connection.
 
-    Conforms to the ModbusUnit protocol while providing lifecycle helpers.
+    Supports both Home Assistant Core shared unit leasing and standalone
+    ModbusConnection management.
     """
 
     def __init__(
@@ -56,6 +58,7 @@ class ResilientModbusUnit:
         port: int = 502,
         unit_id: int = 247,
         timeout: float = DEFAULT_TIMEOUT,
+        modbus_unit: ModbusUnit | None = None,
     ) -> None:
         """Initialize the connection and obtain the unit handle."""
         self.host = host
@@ -64,18 +67,37 @@ class ResilientModbusUnit:
         self.timeout = timeout
         self.bus_lock = asyncio.Lock()
 
-        self._params = ModbusTcpParams(host=host, port=port)
-        self._connection = ModbusConnection(
-            self._params,
-            timeout=timeout,
-            message_spacing=DEFAULT_MESSAGE_SPACING,
-            connect_delay=DEFAULT_CONNECT_DELAY,
-        )
-        self._unit: ModbusUnit = self._connection.for_unit(unit_id)
+        if modbus_unit is not None:
+            self._connection: ModbusConnection | None = getattr(modbus_unit, "_client", None)
+            self._unit: ModbusUnit = modbus_unit
+            self._is_leased = True
+        else:
+            self._params = ModbusTcpParams(host=host, port=port)
+            self._connection = ModbusConnection(
+                self._params,
+                timeout=timeout,
+                message_spacing=DEFAULT_MESSAGE_SPACING,
+                connect_delay=DEFAULT_CONNECT_DELAY,
+            )
+            self._unit = self._connection.for_unit(unit_id)
+            self._is_leased = False
+
+        # Apply bus pacing and transceiver stabilization
+        if hasattr(self._unit, "set_message_spacing"):
+            self._unit.set_message_spacing(DEFAULT_MESSAGE_SPACING)
+        if hasattr(self._unit, "require_connect_delay"):
+            self._unit.require_connect_delay(DEFAULT_CONNECT_DELAY)
+        if hasattr(self._unit, "require_timeout"):
+            self._unit.require_timeout(timeout)
 
     @property
-    def connection(self) -> ModbusConnection:
-        """Return the underlying ModbusConnection."""
+    def is_leased(self) -> bool:
+        """Return True if unit is leased from Core Modbus."""
+        return self._is_leased
+
+    @property
+    def connection(self) -> ModbusConnection | None:
+        """Return the underlying ModbusConnection if available."""
         return self._connection
 
     @property
@@ -172,8 +194,9 @@ class ResilientModbusUnit:
         await self._unit.disconnect()
 
     async def close(self) -> None:
-        """Permanently close the underlying connection."""
-        await self._connection.close()
+        """Permanently close the underlying connection if privately owned."""
+        if not self._is_leased and self._connection is not None:
+            await self._connection.close()
 
     def set_message_spacing(self, seconds: float) -> None:
         """Set minimum pacing interval between requests."""
@@ -194,3 +217,83 @@ class ResilientModbusUnit:
     def __getattr__(self, name: str) -> Any:
         """Forward any other attributes to the underlying ModbusUnit."""
         return getattr(self._unit, name)
+
+
+def async_get_modbus_unit(
+    hass: Any,
+    entry: Any,
+    host: str,
+    port: int = 502,
+    unit_id: int = 247,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> ResilientModbusUnit:
+    """Obtain a ModbusUnit from Core Modbus connection sharing, falling back to standalone."""
+    try:
+        from homeassistant.components.modbus import async_get_unit
+
+        params = ModbusTcpParams(host=host, port=port)
+        core_unit = async_get_unit(hass, entry, params, unit_id)
+        _LOGGER.debug(
+            "Leased shared Modbus unit %s for %s:%s via Core Modbus",
+            unit_id,
+            host,
+            port,
+        )
+        return ResilientModbusUnit(
+            host=host,
+            port=port,
+            unit_id=unit_id,
+            timeout=timeout,
+            modbus_unit=core_unit,
+        )
+    except (ImportError, AttributeError, Exception) as err:
+        _LOGGER.debug(
+            "Core Modbus connection sharing not available (%s); using standalone connection",
+            err,
+        )
+        return ResilientModbusUnit(
+            host=host,
+            port=port,
+            unit_id=unit_id,
+            timeout=timeout,
+        )
+
+
+@asynccontextmanager
+async def async_get_probe_unit(
+    hass: Any,
+    host: str,
+    port: int = 502,
+    unit_id: int = 247,
+    timeout: float = DEFAULT_TIMEOUT,
+):
+    """Context manager to obtain a temporary probe unit."""
+    try:
+        from homeassistant.components.modbus import async_get_temporary_unit
+
+        params = ModbusTcpParams(host=host, port=port)
+        async with async_get_temporary_unit(hass, params, unit_id) as core_unit:
+            unit = ResilientModbusUnit(
+                host=host,
+                port=port,
+                unit_id=unit_id,
+                timeout=timeout,
+                modbus_unit=core_unit,
+            )
+            yield unit
+    except (ImportError, AttributeError, Exception) as err:
+        _LOGGER.debug(
+            "Core Modbus temporary unit not available (%s); using standalone probe unit",
+            err,
+        )
+        unit = ResilientModbusUnit(
+            host=host,
+            port=port,
+            unit_id=unit_id,
+            timeout=timeout,
+        )
+        try:
+            yield unit
+        finally:
+            await unit.close()
+

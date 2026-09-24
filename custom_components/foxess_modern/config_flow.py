@@ -37,7 +37,7 @@ from .const import (
     MODEL_AUTO_DETECT,
     get_migratable_keys_for_model,
 )
-from .connection import ResilientModbusUnit
+from .connection import ResilientModbusUnit, async_get_probe_unit
 from .device import create_inverter
 from .device.identify import async_detect_inverter
 
@@ -133,32 +133,30 @@ async def validate_input(hass: Any, data: dict[str, Any]) -> dict[str, Any]:
     unit_id = data[CONF_UNIT_ID]
     model = data.get(CONF_MODEL, MODEL_AUTO_DETECT)
 
-    unit = ResilientModbusUnit(host=host, port=port, unit_id=unit_id)
-    try:
-        # Detect inverter model and serial number over Modbus
-        detected_model, detected_serial = await async_detect_inverter(unit)
-        if model == MODEL_AUTO_DETECT or not model:
-            model = detected_model
-            data[CONF_MODEL] = detected_model
-        if detected_serial:
-            data["serial_number"] = detected_serial
+    async with async_get_probe_unit(hass, host=host, port=port, unit_id=unit_id) as unit:
+        try:
+            # Detect inverter model and serial number over Modbus
+            detected_model, detected_serial = await async_detect_inverter(unit)
+            if model == MODEL_AUTO_DETECT or not model:
+                model = detected_model
+                data[CONF_MODEL] = detected_model
+            if detected_serial:
+                data["serial_number"] = detected_serial
 
-        inverter = create_inverter(unit, serial_number=detected_serial, model=model)
-        report = await inverter.async_update_readings()
-        if not report.updated:
-            raise CannotConnect("No registers answered on probe")
-    except Exception as err:
-        _LOGGER.error(
-            "Cannot connect to FoxESS inverter at %s:%s (unit %s, model %s): %s",
-            host,
-            port,
-            unit_id,
-            model,
-            err,
-        )
-        raise CannotConnect from err
-    finally:
-        await unit.close()
+            inverter = create_inverter(unit, serial_number=detected_serial, model=model)
+            report = await inverter.async_update_readings()
+            if not report.updated:
+                raise CannotConnect("No registers answered on probe")
+        except Exception as err:
+            _LOGGER.error(
+                "Cannot connect to FoxESS inverter at %s:%s (unit %s, model %s): %s",
+                host,
+                port,
+                unit_id,
+                model,
+                err,
+            )
+            raise CannotConnect from err
 
     serial_display = data.get("serial_number") or host
     return {"title": f"FoxESS {model} ({serial_display})"}

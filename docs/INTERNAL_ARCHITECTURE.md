@@ -50,7 +50,19 @@ Industrial serial-to-Ethernet gateways (such as Waveshare, USR-W610, and Elfin E
 3. Every subsequent read fails with frame desynchronization, triggering a cascade failure across all sub-systems.
 
 ### The Standard Implementation
-Always use `modbus_connection.tmodbus.ModbusConnection`:
+Always use `modbus-connection` and Home Assistant Core Modbus unit leasing:
+```python
+from homeassistant.components.modbus import async_get_unit
+from modbus_connection import ModbusTcpParams
+
+params = ModbusTcpParams(host=host, port=port)
+unit = async_get_unit(hass, entry, params, unit_id)
+unit.set_message_spacing(0.25)  # 250ms RS-485 bus pacing for FoxESS AUX UART line decay
+unit.require_connect_delay(0.05)   # 50ms transceiver line stabilization
+unit.require_timeout(5.0)
+```
+
+For standalone or test environments where Core Modbus is not present, `create_connection` instantiates a standalone `ModbusConnection`:
 ```python
 from modbus_connection import ModbusTcpParams
 from modbus_connection.tmodbus import ModbusConnection
@@ -58,8 +70,8 @@ from modbus_connection.tmodbus import ModbusConnection
 params = ModbusTcpParams(host=host, port=port)
 connection = ModbusConnection(
     params,
-    timeout=2.5,
-    message_spacing=0.1,  # 100ms RS-485 bus pacing for FoxESS AUX UART
+    timeout=5.0,
+    message_spacing=0.25,  # 250ms RS-485 bus pacing for FoxESS AUX UART
     connect_delay=0.05,   # 50ms transceiver line stabilization
 )
 unit = connection.for_unit(unit_id)
@@ -166,7 +178,9 @@ The standalone PyPI library package (`src/foxess_modbus/`) and the vendored Home
 Custom integrations require vendored code so that HACS users can run without installing external binary wheels or waiting for upstream PyPI releases. However, maintaining two disconnected copies inevitably leads to subtle drift where bug fixes or register additions exist in one copy but not the other.
 
 ### How It Is Enforced
-The automated test `tests/test_modbus_connection_spec.py::test_zero_drift_library_and_integration_spec` walks both directories on every test run and asserts identical logic across all Python files. Any modification to `src/` must be mirrored to `custom_components/foxess_modern/device/`, and vice-versa, or the test suite will fail.
+Zero drift is verified continuously:
+1. `python scripts/vendor.py --check` runs in CI (`.github/workflows/pytest.yaml`) and verifies byte-for-byte synchronization. `python scripts/vendor.py --sync` propagates modifications from `src/` to `custom_components/`.
+2. The automated unit test `tests/test_modbus_connection_spec.py::test_zero_drift_library_and_integration_spec` asserts identical logic across all Python files.
 
 All inverter classes (`FoxessKH10Inverter`, `FoxessH1Inverter`, `FoxessH3Inverter`, `FoxessH3ProInverter`) must inherit from `FoxessDevice` and implement the four standard lifecycle methods:
 * `async_update_readings() -> UpdateReport`
@@ -236,13 +250,13 @@ All optional fields, such as `reconfigure_legacy_mappings`, must have explicit l
 ## 9. Summary Checklist for Code Reviews
 
 Before merging changes to `src/` or `custom_components/foxess_modern/`:
-* [ ] Does the change use `modbus_connection.tmodbus.ModbusConnection`?
+* [ ] Does the change use Core Modbus unit leasing (`async_get_unit`) with fallback to `modbus_connection.tmodbus.ModbusConnection`?
 * [ ] Are all block read counts strictly `<= 8`?
-* [ ] Is `message_spacing` kept at `>= 0.08` (recommended: 0.1s)?
+* [ ] Is `message_spacing` kept at `0.25` (250ms RS-485 transceiver decay)?
 * [ ] Does `FoxessDevice` inherit `Device.async_poll` directly without overriding?
 * [ ] Does the coordinator recycle the bridge via `self.device.modbus_unit.disconnect()` after 3 consecutive dead timeouts?
 * [ ] Do cumulative energy sensors (`RestoreSensor`) maintain `available = True`?
 * [ ] Are power entities (`W`) and energy entities (`kWh`) strictly separated in migration aliases?
 * [ ] Does the options flow use `SelectSelector` with string values and pre-selected defaults?
-* [ ] Are `src/foxess_modbus/` and `custom_components/foxess_modern/device/` 100% synchronized?
-* [ ] Do all 43 tests in `pytest tests/` pass?
+* [ ] Are `src/foxess_modbus/` and `custom_components/foxess_modern/device/` 100% synchronized via `python scripts/vendor.py --check`?
+* [ ] Do all tests in `pytest tests/` pass?

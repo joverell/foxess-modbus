@@ -12,7 +12,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .connection import ResilientModbusUnit
+from .connection import ResilientModbusUnit, async_get_modbus_unit
 from .const import (
     CONF_HOST,
     CONF_PORT,
@@ -51,7 +51,7 @@ class FoxessRuntimeData:
     settings_coordinator: FoxessDataUpdateCoordinator
     device: Any
     unit: ResilientModbusUnit
-    connection: ModbusConnection
+    connection: ModbusConnection | None
 
 
 type FoxessConfigEntry = ConfigEntry[FoxessRuntimeData]
@@ -156,7 +156,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
     unit_id = entry.data[CONF_UNIT_ID]
     serial = entry.unique_id or f"{host}_{port}_{unit_id}"
 
-    unit = ResilientModbusUnit(host=host, port=port, unit_id=unit_id)
+    unit = async_get_modbus_unit(hass, entry, host=host, port=port, unit_id=unit_id)
     device = create_inverter(unit, serial_number=serial, model=entry.data.get("model"))
 
     scan_interval = entry.options.get(
@@ -215,5 +215,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> b
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok and hasattr(entry, "runtime_data") and entry.runtime_data:
-        await entry.runtime_data.connection.close()
+        await entry.runtime_data.unit.close()
     return unload_ok
+

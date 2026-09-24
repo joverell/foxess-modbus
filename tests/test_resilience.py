@@ -156,3 +156,70 @@ async def test_connection_status_sensor_debouncing():
     coordinator.is_available = False
     assert entity.native_value == "Disconnected"
 
+
+@pytest.mark.asyncio
+async def test_core_modbus_unit_leasing():
+    """Verify async_get_modbus_unit leases a shared unit when Core Modbus is available."""
+    from custom_components.foxess_modern.connection import async_get_modbus_unit
+
+    mock_core_unit = MagicMock()
+    mock_core_unit.set_message_spacing = MagicMock()
+    mock_core_unit.require_connect_delay = MagicMock()
+    mock_core_unit.require_timeout = MagicMock()
+
+    mock_modbus_module = MagicMock()
+    mock_modbus_module.async_get_unit = MagicMock(return_value=mock_core_unit)
+
+    with patch.dict("sys.modules", {"homeassistant.components.modbus": mock_modbus_module}):
+        unit = async_get_modbus_unit(MagicMock(), MagicMock(), "192.168.1.100", 502, 247)
+        assert unit.is_leased is True
+        mock_core_unit.set_message_spacing.assert_called_once_with(0.25)
+        mock_core_unit.require_connect_delay.assert_called_once_with(0.05)
+        mock_core_unit.require_timeout.assert_called_once_with(5.0)
+
+        # Closing a leased unit must not error or close a shared connection
+        await unit.close()
+
+
+@pytest.mark.asyncio
+async def test_core_modbus_temporary_probe_unit():
+    """Verify async_get_probe_unit leases an ephemeral unit during config flow probe."""
+    from custom_components.foxess_modern.connection import async_get_probe_unit
+
+    mock_core_unit = MagicMock()
+    mock_core_unit.set_message_spacing = MagicMock()
+    mock_core_unit.require_connect_delay = MagicMock()
+    mock_core_unit.require_timeout = MagicMock()
+
+    class MockAsyncContextManager:
+        async def __aenter__(self):
+            return mock_core_unit
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    mock_modbus_module = MagicMock()
+    mock_modbus_module.async_get_temporary_unit = MagicMock(return_value=MockAsyncContextManager())
+
+    with patch.dict("sys.modules", {"homeassistant.components.modbus": mock_modbus_module}):
+        async with async_get_probe_unit(MagicMock(), "192.168.1.100", 502, 247) as probe_unit:
+            assert probe_unit.is_leased is True
+            assert probe_unit.unit is mock_core_unit
+
+
+@pytest.mark.asyncio
+async def test_standalone_fallback_connection():
+    """Verify fallback creates a standalone connection when Core Modbus is not present."""
+    from custom_components.foxess_modern.connection import async_get_modbus_unit
+
+    with patch.dict("sys.modules", {"homeassistant.components.modbus": None}):
+        with patch("custom_components.foxess_modern.connection.ModbusConnection") as mock_conn_cls:
+            mock_conn = MagicMock()
+            mock_conn.for_unit = MagicMock()
+            mock_conn_cls.return_value = mock_conn
+
+            unit = async_get_modbus_unit(MagicMock(), MagicMock(), "127.0.0.1", 502, 247)
+            assert unit.is_leased is False
+            assert unit.connection is mock_conn
+
+
