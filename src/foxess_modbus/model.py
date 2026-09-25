@@ -4,6 +4,27 @@ from __future__ import annotations
 
 from modbus_connection.model import Component, Device
 
+try:
+    from modbus_connection.model import UpdateReport
+except ImportError:
+    try:
+        from modbus_connection.model.device import UpdateReport
+    except ImportError:
+        from dataclasses import dataclass, field
+        from modbus_connection import ModbusError
+
+        @dataclass
+        class UpdateReport:
+            """What one poll managed to refresh."""
+
+            updated: set[str] = field(default_factory=set)
+            failed: dict[str, ModbusError] = field(default_factory=dict)
+
+            @property
+            def complete(self) -> bool:
+                """Whether every sub-system the poll covered refreshed."""
+                return not self.failed
+
 
 class FoxessComponent(Component):
     """Base class for FoxESS Modbus components.

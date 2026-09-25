@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from modbus_connection import ModbusError, ModbusTimeoutError
-from modbus_connection.model import UpdateReport
+from .device.model import UpdateReport
 
 from .const import DOMAIN
 
