@@ -62,11 +62,12 @@ The primary architectural goal for `foxess_modern` is full alignment with Home A
 
 ### Phase 4: PyPI Release & Upstream Repository Alignment
 * **Objective**: Formalize the public release pipeline.
-* **Status**: **Complete & Ready for Release Tag**.
+* **Status**: **Complete & Published Live on PyPI (`foxess-modern` v0.2.0)**.
 * **Key Achievements**:
   1. Configured PyPI Trusted Publishing (OIDC) workflow in `.github/workflows/publish.yml` with dual-tree check, test suite execution, and wheel build validation.
   2. Registered `foxess-modern` as a pending publisher on PyPI linked to `joverell/foxess-modbus`.
   3. Maintained CI workflow (`pytest.yaml`) verifying byte-for-byte synchronization between `src/foxess_modbus/` and `custom_components/foxess_modern/device/` via `python scripts/vendor.py --check`.
+  4. Successfully published `foxess-modern` v0.2.0 to PyPI via automated GitHub Actions OIDC Trusted Publishing.
 
 ---
 

@@ -119,7 +119,7 @@ These registers are writable and manage operating modes, reserve limits, and act
 | :--- | :--- | :--- | :--- | :--- |
 | **41000** | Work Mode | 0, 1, 2, 4 | 0 | 0: Self Use, 1: Feed-in First, 2: Back-up, 4: Peak Shaving |
 | **41007** | Max Charge Current | Model dependent | Max | Maximum charging current in Amperes (scale 0.1) |
-| **41008** | Max Discharge Current | Model dependent | Max | Maximum discharging current in Amperes (scale 0.1) |
+| **41008** | Max Discharge Current | Model dependent | Max | Maximum discharging current in Amperes (scale 0.1; supported on H1/H3, not implemented on KH series) |
 | **41009** | Min SoC | 10 to 100 | 10 | Minimum battery reserve percentage on grid (%) |
 | **41010** | Max SoC | 10 to 100 | 100 | Maximum battery charge cutoff percentage (%) |
 | **41011** | Min SoC (On Grid) | 10 to 100 | 10 | Minimum reserve limit while on grid |
