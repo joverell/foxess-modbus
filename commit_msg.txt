@@ -1,7 +1,0 @@
-Implement native diagnostics, bus lock decoupling, and adaptive pacing
-
-- Add custom_components/foxess_modern/diagnostics.py implementing async_get_config_entry_diagnostics for Home Assistant diagnostics platform.
-- Decouple half-duplex RS-485 bus_lock from ResilientModbusUnit into FoxessRuntimeData and DataUpdateCoordinator (Phase 1).
-- Implement adaptive transceiver bus pacing in coordinator.py: backs off message spacing to 400ms during transient timeouts and restores 250ms on successful reads (Phase 3).
-- Add unit tests in tests/test_diagnostics.py and test_adaptive_transceiver_pacing in tests/test_resilience.py.
-- All 53 unit tests pass cleanly.
