@@ -109,8 +109,8 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
         if self._timeouts > 0:
             unit = getattr(self.device, "modbus_unit", None)
             if unit and hasattr(unit, "set_message_spacing"):
-                # Restore nominal 250ms pacing upon successful communication
-                unit.set_message_spacing(0.25)
+                # Restore nominal 300ms pacing upon successful communication
+                unit.set_message_spacing(0.30)
         self._timeouts = 0
 
         if not report.updated:

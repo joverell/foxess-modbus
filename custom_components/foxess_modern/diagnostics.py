@@ -31,7 +31,7 @@ async def async_get_config_entry_diagnostics(
         "port": getattr(unit, "port", entry.data.get("port")),
         "unit_id": getattr(unit, "unit_id", entry.data.get("unit_id")),
         "timeout": getattr(unit, "timeout", None),
-        "message_spacing": getattr(getattr(unit, "unit", None), "message_spacing", 0.25),
+        "message_spacing": getattr(getattr(unit, "unit", None), "message_spacing", 0.30),
     }
 
     readings_info: dict[str, Any] = {}

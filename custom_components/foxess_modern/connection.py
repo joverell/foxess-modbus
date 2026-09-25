@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 5.0
-DEFAULT_MESSAGE_SPACING = 0.25  # 250ms RS-485 bus pacing for FoxESS AUX UART transceiver line decay
+DEFAULT_MESSAGE_SPACING = 0.30  # 300ms RS-485 bus pacing for FoxESS AUX UART transceiver line decay
 DEFAULT_CONNECT_DELAY = 0.05   # 50ms transceiver line stabilization
 
 

@@ -168,7 +168,7 @@ async def test_connection_pacing_and_bus_lock():
         DEFAULT_MESSAGE_SPACING,
         ResilientModbusUnit,
     )
-    assert DEFAULT_MESSAGE_SPACING == 0.25
+    assert DEFAULT_MESSAGE_SPACING == 0.30
 
     with patch("custom_components.foxess_modern.connection.ModbusConnection"):
         unit = ResilientModbusUnit("127.0.0.1", 502, 247)
@@ -178,10 +178,12 @@ async def test_connection_pacing_and_bus_lock():
 
 @pytest.mark.asyncio
 async def test_connection_status_sensor_debouncing():
-    """Verify connection_status entity relies on coordinator.is_available (debounced)."""
+    """Verify connection_status entity relies on coordinator debouncing."""
     coordinator = MagicMock()
     coordinator.last_update_success = False  # transient single poll failure
     coordinator.is_available = True         # debounced within tolerance
+    coordinator.timeouts = 1
+    coordinator.data = MagicMock()
     coordinator.device_info = MagicMock()
 
     conn_desc = next(d for d in BASE_SENSOR_DESCRIPTIONS if d.key == "connection_status")
@@ -192,7 +194,12 @@ async def test_connection_status_sensor_debouncing():
     # Should report Connected while within debounce window even if last_update_success is False
     assert entity.native_value == "Connected"
 
-    # Sustained outage marks coordinator unavailable
+    # Even during transient socket drop while within tolerance
+    dev.modbus_unit.connected = False
+    assert entity.native_value == "Connected"
+
+    # Sustained outage (3 timeouts) marks Disconnected
+    coordinator.timeouts = 3
     coordinator.is_available = False
     assert entity.native_value == "Disconnected"
 
@@ -216,7 +223,7 @@ async def test_core_modbus_unit_leasing():
     with patch.dict("sys.modules", {"homeassistant.components.modbus": mock_modbus_module}):
         unit = async_get_modbus_unit(mock_hass, MagicMock(), "192.168.1.100", 502, 247)
         assert unit.is_leased is True
-        mock_core_unit.set_message_spacing.assert_called_once_with(0.25)
+        mock_core_unit.set_message_spacing.assert_called_once_with(0.30)
         mock_core_unit.require_connect_delay.assert_called_once_with(0.05)
         mock_core_unit.require_timeout.assert_called_once_with(5.0)
 
@@ -364,7 +371,7 @@ async def test_adaptive_transceiver_pacing():
     assert coord.timeouts == 1
     mock_unit.set_message_spacing.assert_called_with(0.40)
 
-    # 2. On subsequent success, message spacing restores to 0.25s
+    # 2. On subsequent success, message spacing restores to 0.30s
     mock_report = MagicMock(spec=UpdateReport)
     mock_report.updated = True
     mock_report.failed = {}
@@ -374,7 +381,7 @@ async def test_adaptive_transceiver_pacing():
     res = await coord._do_update_data()
     assert res is mock_report
     assert coord.timeouts == 0
-    mock_unit.set_message_spacing.assert_called_with(0.25)
+    mock_unit.set_message_spacing.assert_called_with(0.30)
 
 
 

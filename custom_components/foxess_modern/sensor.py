@@ -947,9 +947,13 @@ class FoxessSensorEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], SensorE
     def native_value(self) -> Any:
         """Return the state of the sensor."""
         if self.entity_description.key == "connection_status":
+            if self.coordinator.timeouts >= 3 or not self.coordinator.is_available:
+                return "Disconnected"
             unit = getattr(self._device, "modbus_unit", None)
             is_connected = bool(getattr(unit, "connected", False)) if unit else False
-            return "Connected" if (is_connected and self.coordinator.is_available) else "Disconnected"
+            if not is_connected and (self.coordinator.data is None or self.coordinator.timeouts >= 2):
+                return "Disconnected"
+            return "Connected"
         return self.entity_description.value_fn(self._device)
 
 
