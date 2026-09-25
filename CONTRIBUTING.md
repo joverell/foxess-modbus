@@ -40,7 +40,10 @@ When contributing support for another FoxESS series:
    Subclass `FoxessDevice` (which inherits from `modbus_connection.model.Device`), instantiate your components, and group fast telemetry (`_readings`) and slower configuration (`_settings`). Ensure `async_update()` returns `UpdateReport` and `async_read_raw(names=...)` returns `Raw`.
 
 3. **Maintain Dual-Tree Zero Drift**:
-   Synchronize any changes in `src/foxess_modbus/<series>/` with the vendored Home Assistant integration directory `custom_components/foxess_modern/device/<series>/`.
+   Synchronize any changes in `src/foxess_modbus/<series>/` with the vendored Home Assistant integration directory `custom_components/foxess_modern/device/<series>/`. Use the automated synchronization tool:
+   ```bash
+   python scripts/vendor.py --sync
+   ```
 
 4. **Add Unit Tests & Parity Verification**:
    Create a test fixture in `tests/` using `MockModbusConnection`:
@@ -57,10 +60,14 @@ When contributing support for another FoxESS series:
 
 ## Running Tests & Checks
 
-Before submitting a Pull Request, verify that all unit and specification tests pass:
+Before submitting a Pull Request, verify both zero-drift synchronization and unit test suite passing:
 
 ```bash
-pytest -v
+# Verify byte-for-byte synchronization between standalone library and vendored component
+python scripts/vendor.py --check
+
+# Run full pytest test suite
+python -m pytest -v
 ```
 
 This validates both functional inverter modeling and strict compliance with the upstream `modbus-connection` design specifications (`tests/test_modbus_connection_spec.py`).

@@ -28,12 +28,14 @@ Built specifically against [`modbus-connection`](https://home-assistant-libs.git
 
 - **Backend-Neutral**: Operates on `modbus-connection`, supporting both `tmodbus` and `pymodbus` seamlessly.
 - **Inverter Microcontroller Protection**: Automatically groups and limits register reads (`max_span = 8`) to prevent the FoxESS AUX microcontroller UART FIFO buffer from overflowing and stalling.
+- **Resilient Bus Timing & Debouncing**: Enforces 300ms RS-485 inter-frame pacing with adaptive backoff to 450ms during transient timeouts. Telemetry and connection status sensors are debounced to absorb isolated packet loss without flapping in the Home Assistant logbook.
 - **Shared Gateway Friendly**: Designed to operate with Home Assistant's `async_get_unit` connection broker. Multiple integrations and meters (e.g. Eastron, heat pumps) can share the same physical RS-485 bridge without bus collisions.
 - **Configurable Polling Interval**: User-selectable scan rate (5s, 10s, 15s, 30s, 60s; default is **15s**) configured directly in Options.
 - **First-Class Predbat Automation**: Native signed net grid power sensor (+export, -import) and dedicated services for force charging, force discharging, clearing overrides, and setting work modes using remote active power registers to avoid solar curtailment.
 - **Dynamic Power Scaling**: Scales power limits dynamically up to 30,000 W for commercial H3-Pro systems.
 - **Multi-Model EPS Telemetry**: Real-time backup power, voltage, current, and frequency monitoring across single-phase and three-phase inverters.
 - **Strongly Typed**: Registers and coils map to typed Python properties with automatic endianness and scale factor decoding.
+- **Standalone PyPI Distribution**: Published as `foxess-modern` on PyPI via GitHub Actions Trusted Publishing, maintaining 100% synchronization with the vendored Home Assistant custom integration.
 - **Fully Tested**: Tested with mock in-memory Modbus backends and automated zero-drift compliance tests.
 
 ---
@@ -125,7 +127,7 @@ from foxess_modbus import FoxessKH10Inverter, WorkMode
 async def main():
     # Configure your RS-485 to Ethernet adapter (e.g., Waveshare, Elfin EW11)
     params = ModbusTcpParams(host="192.168.86.162", port=502)
-    connection = ModbusConnection(params, timeout=5.0, message_spacing=0.08)
+    connection = ModbusConnection(params, timeout=5.0, message_spacing=0.30)
 
     try:
         # Request unit handle for slave address 247

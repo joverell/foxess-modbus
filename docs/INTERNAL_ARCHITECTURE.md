@@ -57,7 +57,7 @@ from modbus_connection import ModbusTcpParams
 
 params = ModbusTcpParams(host=host, port=port)
 unit = async_get_unit(hass, entry, params, unit_id)
-unit.set_message_spacing(0.25)  # 250ms RS-485 bus pacing for FoxESS AUX UART line decay
+unit.set_message_spacing(0.30)  # 300ms RS-485 bus pacing for FoxESS AUX UART line decay
 unit.require_connect_delay(0.05)   # 50ms transceiver line stabilization
 unit.require_timeout(5.0)
 ```
@@ -71,7 +71,7 @@ params = ModbusTcpParams(host=host, port=port)
 connection = ModbusConnection(
     params,
     timeout=5.0,
-    message_spacing=0.25,  # 250ms RS-485 bus pacing for FoxESS AUX UART
+    message_spacing=0.30,  # 300ms RS-485 bus pacing for FoxESS AUX UART
     connect_delay=0.05,   # 50ms transceiver line stabilization
 )
 unit = connection.for_unit(unit_id)
@@ -112,6 +112,7 @@ Manage `DataUpdateCoordinator[UpdateReport]`. Track consecutive timeouts across 
 2. **Slow Coordinator Availability Continuity**: `settings_coordinator` polls on a 60-second cycle (`SETTINGS_SCAN_INTERVAL = 60`). If debouncing is only applied to fast poll, a single dropped Wi-Fi packet on the 60-second settings poll causes all configuration entities (`number.export_power_limit`, `number.min_soc`, `select.work_mode`) to flap to `Unavailable` for a full 60 to 120 seconds. Applying `self._timeouts < 2 and self.data is not None` to all coordinators ensures configuration entities remain stable across transient link hiccups.
 3. **Bridge Recycling**: If the serial bridge wedges and keeps the TCP socket open while the inverter stops responding, counting 3 consecutive timeouts and calling `await self.device.modbus_unit.disconnect()` forces the TCP socket to close and re-establish cleanly.
 4. **Cumulative Statistics Continuity**: Cumulative energy sensors (`RestoreSensor` with `state_class=TOTAL_INCREASING`) must maintain `available = True` so long-term energy history and the Home Assistant Energy Dashboard never have gaps during nightly inverter power-downs.
+5. **Connection Status Debouncing**: The diagnostic `sensor.connection_status` entity reports state based on `timeouts < 3`. Rather than flipping to `Disconnected` whenever a single read cycle times out or during a 20-second self-healing TCP socket reconnect, it maintains `Connected` until 3 consecutive failed cycles occur. This shields the Home Assistant logbook from transient disconnect noise while accurately reflecting true link outages.
 
 ### The Standard Implementation
 ```python
@@ -263,17 +264,17 @@ All optional fields, such as `reconfigure_legacy_mappings`, must have explicit l
 ## 9. Invariant 8: Half-Duplex Bus Locking and Frame Spacing
 
 ### The Rule
-Enforce complete serialization of all Modbus transactions across all coordinators and UI write commands on the shared RS-485 bus. Maintain a minimum of 250 ms (`message_spacing = 0.25`) inter-frame spacing and configure a minimum 5.0 second timeout for all read blocks.
+Enforce complete serialization of all Modbus transactions across all coordinators and UI write commands on the shared RS-485 bus. Maintain a minimum of 300 ms (`message_spacing = 0.30`) inter-frame spacing with adaptive scaling to 450 ms (`0.45s`) on transient timeouts, and configure a minimum 5.0 second timeout for all read blocks.
 
 ### Why This Rule Exists
 1. **Half-Duplex Contention**: RS-485 serial communication is inherently half-duplex. If `readings_coordinator` (15s fast poll) and `settings_coordinator` (60s slow poll) attempt to communicate concurrently without locking, packets collide on the serial line, causing corrupted frames and timeout spikes.
-2. **Transceiver Decay & Microcontroller Buffer Overrun**: Serial bridge transceivers (such as MAX485/SP3485) and the FoxESS inverter AUX microcontroller UART require physical recovery time to clear receive buffers and switch between transmit and receive states. An inter-frame spacing of 250 ms prevents FIFO buffer overflow and hardware UART deadlocks.
+2. **Inverter Calculation Latency & Microcontroller Buffer Overrun**: FoxESS KH10 inverters asynchronously compute readings across 4 MPPT strings, high-voltage battery modules, and grid telemetry. When polled faster than 300 ms, the inverter AUX microcontroller cannot service register requests before the next poll arrives, causing RS-485 bridges to return `Transaction ID: 0` error packets or drop responses. An inter-frame spacing of 300 ms (backed off to 450 ms during retries) prevents FIFO buffer overflow and hardware UART deadlocks.
 3. **Multi-Block Timeout Budgeting**: Because register queries are segmented into blocks of at most 8 registers, a full poll cycle requires sequential block transactions. Sizing Modbus connection timeouts to at least 5.0 seconds provides sufficient margin for sequential multi-block responses over Wi-Fi bridge hops.
 
 ### How It Is Enforced
 * Connection leasing via `async_get_unit` shares a single `modbus-connection` unit lease across coordinators.
-* `ModbusConnection` parameters in `device/__init__.py` and fallback connection initializers specify `message_spacing = 0.25` and `timeout = 5.0`.
-* In `coordinator.py`, coordinator updates sequence through `_do_update_data`, ensuring bus queries are dispatched sequentially.
+* `ModbusConnection` parameters in `device/__init__.py` and fallback connection initializers specify `message_spacing = 0.30` and `timeout = 5.0`.
+* In `coordinator.py`, coordinator updates sequence through `_do_update_data`, ensuring bus queries are dispatched sequentially, with adaptive spacing scaling to 450 ms during transient errors.
 
 ---
 
@@ -298,6 +299,12 @@ And package discovery:
 [tool.setuptools.packages.find]
 where = ["src"]
 ```
+
+### Trusted Publishing Pipeline
+Automated publishing is defined in `.github/workflows/publish.yml` using OpenID Connect (OIDC) Trusted Publishing:
+1. Gated verification runs first: verifies byte-for-byte dual-tree synchronization (`python scripts/vendor.py --check`) and passes all 53 unit tests.
+2. Build stage creates sdist and wheel packages, validated with `twine check`.
+3. Release job publishes artifacts directly to PyPI with provenance attestations without requiring long-lived API tokens.
 
 ---
 
@@ -328,10 +335,11 @@ Home Assistant Core containers pin specific minor versions of upstream libraries
 Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Does the change use Core Modbus unit leasing (`async_get_unit`) with fallback to `modbus_connection.tmodbus.ModbusConnection`?
 * [ ] Are all block read counts strictly `<= 8`?
-* [ ] Is `message_spacing` kept at `0.25` (250ms RS-485 transceiver decay)?
+* [ ] Is `message_spacing` kept at `0.30` (300ms RS-485 transceiver decay and KH10 calculation margin)?
 * [ ] Does `FoxessDevice` inherit `Device.async_poll` directly without overriding?
 * [ ] Does the coordinator recycle the bridge via `self.device.modbus_unit.disconnect()` after 3 consecutive dead timeouts?
 * [ ] Is `is_available` debounced (`self._timeouts < 2 and self.data is not None`) across all coordinators?
+* [ ] Is `sensor.connection_status` debounced (`self._coordinator._timeouts < 3`) to prevent logbook flapping?
 * [ ] Do cumulative energy sensors (`RestoreSensor`) maintain `available = True`?
 * [ ] Are power entities (`W`) and energy entities (`kWh`) strictly separated in migration aliases?
 * [ ] Does the options flow use `SelectSelector` with string values and pre-selected defaults?

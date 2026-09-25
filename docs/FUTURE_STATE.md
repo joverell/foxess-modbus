@@ -22,7 +22,7 @@ The primary architectural goal for `foxess_modern` is full alignment with Home A
 | **Half-Duplex Bus Locking** | Mutex (`asyncio.Lock`) decoupled into `FoxessRuntimeData` and coordinator layer | Central bus serialization managed by Core Modbus broker |
 | **Manifest Dependencies** | `"after_dependencies": ["modbus"]` for zero-YAML connection pooling | Standardized load ordering across all Modbus integrations |
 | **Diagnostics Platform** | Native `diagnostics.py` exposing lease status, bus timings, and coordinator health | Standard Home Assistant diagnostic export |
-| **Transceiver Bus Pacing** | Adaptive pacing (nominal `250ms`, scaling to `400ms` during transient timeouts) | Centralized bus timing negotiated with serial bridge |
+| **Transceiver Bus Pacing** | Adaptive pacing (nominal `300ms`, scaling to `450ms` during transient timeouts) | Centralized bus timing negotiated with serial bridge |
 | **Coordinator Resilience** | Universal timeout debouncing (`self._timeouts < 2`) across all coordinators | Core DataUpdateCoordinator resilience standard |
 | **PyPI Package Name** | Standalone library packaging configured as `foxess-modern` | Automated PyPI Trusted Publishing via GitHub Actions on release tags |
 
@@ -56,17 +56,17 @@ The primary architectural goal for `foxess_modern` is full alignment with Home A
      * Exposes coordinator health, intervals, consecutive timeout counters, and failed subsystem sets.
      * Automatically redacts serial numbers and unique IDs via `async_redact_data`.
   2. Adaptive Transceiver Bus Pacing:
-     * Base pacing at `250ms` (optimal for FoxESS AUX UART).
-     * Automatically backs off to `400ms` on transient timeouts to let transceiver line ringing and bridge FIFO buffers clear, returning to `250ms` upon successful communication.
+     * Base pacing at `300ms` (optimal for FoxESS AUX UART and 4-string KH10 background calculations).
+     * Automatically backs off to `450ms` on transient timeouts to let transceiver line ringing and bridge FIFO buffers clear, returning to `300ms` upon successful communication.
 * **Future Extension**: Register boundary auto-discovery if future firmware introduces non-contiguous blocks.
 
 ### Phase 4: PyPI Release & Upstream Repository Alignment
 * **Objective**: Formalize the public release pipeline.
-* **Status**: **Ready (Awaiting User Release Instruction)**.
-* **Action Items**:
-  1. Complete PyPI Trusted Publisher registration for package `foxess-modern`.
-  2. Maintain CI workflow (`pytest.yaml`) verifying byte-for-byte synchronization between `src/foxess_modbus/` and `custom_components/foxess_modern/device/` via `python scripts/vendor.py --check`.
-  3. Tag and publish releases only upon explicit user instruction.
+* **Status**: **Complete & Ready for Release Tag**.
+* **Key Achievements**:
+  1. Configured PyPI Trusted Publishing (OIDC) workflow in `.github/workflows/publish.yml` with dual-tree check, test suite execution, and wheel build validation.
+  2. Registered `foxess-modern` as a pending publisher on PyPI linked to `joverell/foxess-modbus`.
+  3. Maintained CI workflow (`pytest.yaml`) verifying byte-for-byte synchronization between `src/foxess_modbus/` and `custom_components/foxess_modern/device/` via `python scripts/vendor.py --check`.
 
 ---
 
@@ -76,11 +76,13 @@ Any future architectural refactoring must strictly respect these field-tested re
 
 1. **The 60-Second Half-Duplex Collision Trap**:
    `readings_coordinator` (15s) and `settings_coordinator` (60s) poll concurrently in `asyncio`. Every 60 seconds, without a shared mutex, their read frames collide on the physical RS-485 wire. Mutual exclusion locking between coordinators is non-negotiable.
-2. **250ms RS-485 Transceiver Line Decay**:
-   Waveshare and High-Flying RS-485 bridge transceivers exhibit up to 200ms of line capacitance ringing and direction-switch delay. `message_spacing` must remain at least 0.25 seconds.
+2. **300ms RS-485 Transceiver Line Decay & Inverter Computation**:
+   Waveshare and High-Flying RS-485 bridge transceivers exhibit up to 200ms of line capacitance ringing and direction-switch delay. In addition, FoxESS KH10 AUX microcontrollers calculate 4 MPPT strings asynchronously. `message_spacing` must remain at least 0.30 seconds (300ms).
 3. **Universal Coordinator Timeout Debouncing**:
    Wi-Fi gateways drop occasional packets. Inverter control entities (`Export Power Limit`, `Min SoC`, `Work Mode`) poll on a 60-second cycle. If slow coordinators lack debouncing, a single dropped frame causes all controls to flap to `Unavailable` for up to two minutes. `self._timeouts < 2` debouncing across all coordinators is mandatory.
-4. **No Unconditional Core Manifest Dependencies**:
+4. **Single-Socket Gateway Isolation**:
+   On RS-485 to Ethernet/Wi-Fi bridges (such as Waveshare), secondary sockets (e.g. Socket B on port 18899) must be turned OFF. When enabled, internal RAM contention causes the bridge to emit `Transaction ID: 0` error responses during prolonged inverter calculations.
+5. **No Unconditional Core Manifest Dependencies**:
    Never add `"dependencies": ["modbus"]` until Home Assistant Core supports zero-YAML UI configuration for Modbus gateways.
 
 ---
@@ -90,7 +92,7 @@ Any future architectural refactoring must strictly respect these field-tested re
 Before introducing changes targeting the future architecture:
 * [ ] Does the change keep all entities functioning without requiring manual YAML `modbus:` entries?
 * [ ] Is half-duplex bus locking preserved across all polling cycles and UI write commands?
-* [ ] Is `message_spacing` maintained at or above 250ms?
-* [ ] Do control entities remain debounced against isolated Wi-Fi timeouts?
+* [ ] Is `message_spacing` maintained at or above 300ms?
+* [ ] Do control entities and connection status remain debounced against isolated Wi-Fi timeouts?
 * [ ] Does `python scripts/vendor.py --check` report 100% synchronization?
 * [ ] Does `python -m pytest tests/` pass all tests?

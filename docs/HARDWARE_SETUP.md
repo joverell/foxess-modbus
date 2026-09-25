@@ -86,7 +86,7 @@ BOTTOM ROW:  [ 12 ]       [ 13 ]       [ 14 ]       [ 15 ]       [ 16 ]
 | **6** | `CT2-` | Secondary CT (Negative) | Optional second solar inverter clamp |
 | **7** | **`CT1-`** | **Grid CT Clamp (Negative)** | **Main grid CT clamp** |
 | **8** | **`CT1+`** | **Grid CT Clamp (Positive)** | **Main grid CT clamp** |
-| **9–16** | Relay / DRM / DI | Control Signals | Demand response (DRM) or heat pump contacts |
+| **9-16** | Relay / DRM / DI | Control Signals | Demand response (DRM) or heat pump contacts |
 
 #### Multi-Conductor Cable Terminations
 Installers frequently route a single multi-conductor cable between the switchboard and the inverter:
@@ -116,7 +116,7 @@ If you have multiple Modbus slave devices (e.g., an Eastron meter on Slave ID 1 
 This section applies to the popular **Waveshare RS485 to Ethernet/WiFi Gateway** (and functionally identical High-Flying HF-A11 / USR-W610 hardware).
 
 ### Step 1: Initial Connection
-1. Power the module using a 9–36V DC supply (or 5V micro-USB depending on hardware revision).
+1. Power the module using a 9-36V DC supply (or 5V micro-USB depending on hardware revision).
 2. The device broadcasts an initial Wi-Fi hotspot: `Waveshare_E600` (or `HF-A11x_AP`).
 3. Connect your computer to this hotspot and navigate to the web management console at:
    ```text
@@ -149,10 +149,10 @@ Navigate to **Wifi-Uart Setting** in the web interface:
    * **Port:** `502` *(standard Modbus TCP port)*
    * Click **Apply**.
 
-4. **Disable Unused Background Sockets:**
-   * **Socket B:** Set to `OFF` and click **Apply**.
+4. **Disable Unused Background Sockets (CRITICAL for Stability):**
+   * **Socket B:** Set `Open the SocketB function` to **`OFF`** (Port 18899) and click **Apply**.
    * **MQTT Settings:** Set to `OFF` and click **Apply**.
-   * *Why:* Disabling unused cloud sockets prevents memory contention and packet buffering delays on the bridge's microcontroller.
+   * *Why:* The Waveshare bridge runs on an embedded High-Flying microcontroller with constrained RAM and buffer capacity. When Socket B is active, the gateway divides its internal serial scheduler and network buffers between port 502 and port 18899. Under high polling load or when the FoxESS AUX microcontroller takes longer to compute readings, this contention causes the gateway to emit `Transaction ID: 0` error responses or drop packets. Completely turning off Socket B eliminates this buffer contention.
 
 ---
 
@@ -237,8 +237,9 @@ To maintain high reliability across different network environments (especially o
    * Telemetry is gathered in small, predictable transactions. This keeps the serial bus clear and strictly prevents buffer saturation on FoxESS AUX UART microcontrollers or latency-prone wireless bridges.
    * Note: While certain hardwired, direct-serial installations might technically tolerate wider spans, limiting transactions to 8 registers represents a proven, defensive standard that ensures complete immunity from microcontroller serial lockups across all FoxESS hardware revisions.
 
-2. **Inter-Frame Timing Safeguards (`message_spacing = 250ms`):**
-   * Enforces a 250 ms (`0.25s`) rest interval between consecutive Modbus transactions, giving the inverter AUX microcontroller and the gateway transceiver sufficient decay time to clear their receive buffers.
+2. **Inter-Frame Timing Safeguards (`message_spacing = 300ms`):**
+   * Enforces a 300 ms (`0.30s`) nominal rest interval between consecutive Modbus transactions, with adaptive scaling to 450 ms (`0.45s`) during transient timeouts.
+   * *Why:* FoxESS KH10 hybrid inverters perform complex background calculations across 4 independent MPPT strings, high-voltage BMS cells, and grid CT metrics. When polled faster than 300 ms under sustained operations, the inverter AUX microcontroller cannot service the serial register queue in time, causing RS-485 bridges to return `Transaction ID: 0` error packets. Pacing at 300 ms guarantees sufficient decay time for the microcontroller and bridge transceivers.
 
 3. **Coordinated Write Locking (`modbus-connection`):**
    * All read and write operations pass through Home Assistant's central asynchronous queue broker.
@@ -248,9 +249,10 @@ To maintain high reliability across different network environments (especially o
    * Dynamic operational readings (power, voltage, SoC) poll every 15 seconds (`SCAN_INTERVAL = 15`).
    * Configuration parameters (configured Min SoC, charge windows) poll every 60 seconds (`SETTINGS_SCAN_INTERVAL = 60`).
 
-5. **Universal Coordinator Debouncing:**
+5. **Universal Coordinator & Connection Status Debouncing:**
    * Wireless gateways located near switchboards or outdoor meter boxes experience occasional dropped Wi-Fi packets or TCP retransmission jitter.
-   * Inverter data in memory remains valid across transient timeouts. Coordinators debounce single poll failures (`self._timeouts < 2 and self.data is not None`), preventing entities like `Export Power Limit`, `Min SoC`, or `Work Mode` from flapping to `Unavailable` during isolated packet drops, while still recycling wedged bridge connections if 3 consecutive timeouts occur.
+   * **Telemetry Data Debouncing**: Inverter data in memory remains valid across transient timeouts. Coordinators debounce single poll failures (`self._timeouts < 2 and self.data is not None`), preventing entities like `Export Power Limit`, `Min SoC`, or `Work Mode` from flapping to `Unavailable` during isolated packet drops, while still recycling wedged bridge connections if 3 consecutive timeouts occur.
+   * **Connection Status Debouncing**: The `sensor.connection_status` entity requires 3 consecutive failed cycles (`timeouts >= 3`) before transitioning to `Disconnected`. Isolated dropped packets or self-healing 20-second socket recycles are absorbed silently, eliminating unnecessary flapping in the Home Assistant logbook.
 
 ---
 
@@ -313,7 +315,7 @@ modbus:
     host: 192.168.86.162
     port: 502
     timeout: 5
-    message_wait_milliseconds: 250
+    message_wait_milliseconds: 300
 ```
 
 ### Automatic Promotion in `foxess_modern`
