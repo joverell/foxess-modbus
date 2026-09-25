@@ -313,13 +313,13 @@ Never declare `"dependencies": ["modbus"]` in `manifest.json`. Always declare `"
 
 ---
 
-## 12. Invariant 11: Multi-Version Upstream Library Compatibility (`UpdateReport`)
+## 12. Invariant 11: Multi-Version Upstream Library Compatibility (`Device`, `Raw`, `UpdateReport`)
 
 ### The Rule
-Never import `UpdateReport` exclusively from `modbus_connection.model`. Always route imports through `foxess_modbus.model.UpdateReport`, which encapsulates a multi-stage fallback across `modbus_connection.model`, `modbus_connection.model.device`, and a native dataclass fallback.
+Never import `Device`, `Raw`, or `UpdateReport` directly from `modbus_connection.model`. Always route imports through `foxess_modbus.model`, which encapsulates multi-stage fallbacks across `modbus_connection.model`, submodules (`modbus_connection.model.device`, `modbus_connection.model._const`), and native fallbacks.
 
 ### Why This Rule Exists
-Home Assistant Core containers pin specific minor versions of upstream libraries. In Core 2026.9.3, Core pins `modbus-connection==4.10.0`. In version 4.10.0, `UpdateReport` is located in `modbus_connection.model.device`, whereas version 4.11.0+ re-exports it from `modbus_connection.model.__init__.py`. Because Home Assistant restricts custom integrations from mutating Core's pinned container packages, attempting an unqualified top-level import raises `ImportError: cannot import name 'UpdateReport' from 'modbus_connection.model'` during cold reboot, crashing integration setup.
+Home Assistant Core containers pin specific minor versions of upstream libraries. In Core 2026.9.3, Core pins `modbus-connection==4.10.0`. In version 4.10.0, `Device`, `Raw`, and `UpdateReport` were located in submodules rather than re-exported from `modbus_connection.model.__init__.py` (which was introduced in version 4.11.0+). Because Home Assistant restricts custom integrations from mutating Core's pinned container packages, attempting an unqualified top-level import raises `ImportError: cannot import name 'Device' from 'modbus_connection.model'` during cold reboot, crashing integration setup.
 
 ---
 
