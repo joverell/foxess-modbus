@@ -313,7 +313,17 @@ Never declare `"dependencies": ["modbus"]` in `manifest.json`. Always declare `"
 
 ---
 
-## 12. Summary Checklist for Code Reviews
+## 12. Invariant 11: Multi-Version Upstream Library Compatibility (`UpdateReport`)
+
+### The Rule
+Never import `UpdateReport` exclusively from `modbus_connection.model`. Always route imports through `foxess_modbus.model.UpdateReport`, which encapsulates a multi-stage fallback across `modbus_connection.model`, `modbus_connection.model.device`, and a native dataclass fallback.
+
+### Why This Rule Exists
+Home Assistant Core containers pin specific minor versions of upstream libraries. In Core 2026.9.3, Core pins `modbus-connection==4.10.0`. In version 4.10.0, `UpdateReport` is located in `modbus_connection.model.device`, whereas version 4.11.0+ re-exports it from `modbus_connection.model.__init__.py`. Because Home Assistant restricts custom integrations from mutating Core's pinned container packages, attempting an unqualified top-level import raises `ImportError: cannot import name 'UpdateReport' from 'modbus_connection.model'` during cold reboot, crashing integration setup.
+
+---
+
+## 13. Summary Checklist for Code Reviews
 
 Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Does the change use Core Modbus unit leasing (`async_get_unit`) with fallback to `modbus_connection.tmodbus.ModbusConnection`?
@@ -327,6 +337,7 @@ Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Does the options flow use `SelectSelector` with string values and pre-selected defaults?
 * [ ] Is the PyPI distribution package name configured as `foxess-modern`?
 * [ ] Are manifest dependencies configured as `"after_dependencies": ["modbus"]` (never hard `"dependencies"`)?
+* [ ] Are `UpdateReport` imports sourced via `foxess_modbus.model` for container compatibility?
 * [ ] Are `src/foxess_modbus/` and `custom_components/foxess_modern/device/` 100% synchronized via `python scripts/vendor.py --check`?
 * [ ] Do all tests in `pytest tests/` pass?
 
