@@ -317,7 +317,7 @@ modbus:
 ```
 
 ### Automatic Promotion in `foxess_modern`
-* When `modbus:` is present in `configuration.yaml`, `foxess_modern` automatically detects the shared gateway on startup, leases Slave ID 247 from Core Modbus, and automatically dismisses the Standalone Repairs advisory.
+* When `modbus:` is present in `configuration.yaml`, `foxess_modern` automatically detects the shared gateway on startup and leases Slave ID 247 from Core Modbus.
 * If `modbus:` is not configured in YAML, `foxess_modern` runs seamlessly in standalone mode using its internal `modbus-connection` transport with zero manual configuration required.
 
 ---

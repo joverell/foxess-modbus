@@ -228,29 +228,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
 
     await async_migrate_entity_registry(hass, entry)
 
-    # Manage Repairs advisory for shared Core Modbus gateway pooling
+    # Clean up any legacy Repairs advisory issues
     try:
         from homeassistant.helpers import issue_registry as ir
 
-        repair_issue_id = f"modbus_standalone_advisory_{entry.entry_id}"
-        if unit.is_leased:
-            ir.async_delete_issue(hass, DOMAIN, repair_issue_id)
-        else:
-            ir.async_create_issue(
-                hass,
-                DOMAIN,
-                repair_issue_id,
-                is_fixable=False,
-                is_persistent=False,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key="modbus_standalone_advisory",
-                translation_placeholders={
-                    "host": host,
-                    "port": str(port),
-                },
-            )
+        ir.async_delete_issue(
+            hass,
+            DOMAIN,
+            f"modbus_standalone_advisory_{entry.entry_id}",
+        )
     except Exception as issue_err:
-        _LOGGER.debug("Could not update issue registry: %s", issue_err)
+        _LOGGER.debug("Could not clean up issue registry: %s", issue_err)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

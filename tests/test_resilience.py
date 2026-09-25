@@ -268,8 +268,8 @@ async def test_standalone_fallback_connection():
 
 
 @pytest.mark.asyncio
-async def test_repairs_advisory_issue_lifecycle():
-    """Verify standalone connection creates a Repairs issue and leased connection deletes it."""
+async def test_repairs_advisory_cleanup():
+    """Verify setup and unload always clean up legacy Repairs advisory issues."""
     from custom_components.foxess_modern import async_setup_entry, async_unload_entry
 
     mock_hass = MagicMock()
@@ -299,7 +299,6 @@ async def test_repairs_advisory_issue_lifecycle():
     mock_device.async_update_settings = AsyncMock(return_value=MagicMock())
 
     mock_ir = MagicMock()
-    mock_ir.IssueSeverity.WARNING = "warning"
     mock_ir.async_create_issue = MagicMock()
     mock_ir.async_delete_issue = MagicMock()
 
@@ -314,16 +313,13 @@ async def test_repairs_advisory_issue_lifecycle():
         mock_coord.async_refresh = AsyncMock()
         mock_coord_cls.return_value = mock_coord
 
-        # 1. Setup in standalone mode creates Repairs advisory issue
+        # 1. Setup in standalone mode clears legacy advisory issue and creates no new issues
         assert await async_setup_entry(mock_hass, mock_entry) is True
-        mock_ir.async_create_issue.assert_called_once()
-        args, kwargs = mock_ir.async_create_issue.call_args
-        assert kwargs["translation_key"] == "modbus_standalone_advisory"
-        assert kwargs["translation_placeholders"]["host"] == "192.168.86.162"
+        mock_ir.async_delete_issue.assert_called_once_with(mock_hass, "foxess_modern", "modbus_standalone_advisory_test_entry_456")
+        mock_ir.async_create_issue.assert_not_called()
 
-        # 2. Setup with leased unit clears Repairs advisory issue
+        # 2. Setup with leased unit also clears legacy advisory issue
         mock_unit.is_leased = True
-        mock_ir.async_create_issue.reset_mock()
         mock_ir.async_delete_issue.reset_mock()
         assert await async_setup_entry(mock_hass, mock_entry) is True
         mock_ir.async_delete_issue.assert_called_once_with(mock_hass, "foxess_modern", "modbus_standalone_advisory_test_entry_456")

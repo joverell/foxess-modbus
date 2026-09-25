@@ -301,15 +301,15 @@ where = ["src"]
 
 ---
 
-## 11. Invariant 10: Opportunistic Core Modbus Leasing and Repairs Advisory
+## 11. Invariant 10: Opportunistic Core Modbus Leasing with Standalone Autonomy
 
 ### The Rule
-Never declare `"dependencies": ["modbus"]` in `manifest.json`. Always declare `"after_dependencies": ["modbus"]` and implement opportunistic connection leasing via `async_get_modbus_unit`. If Core Modbus is active, lease the shared unit; if absent or unconfigured, fall back seamlessly to standalone `modbus-connection` and register a non-breaking Repairs advisory (`modbus_standalone_advisory`).
+Never declare `"dependencies": ["modbus"]` in `manifest.json`. Always declare `"after_dependencies": ["modbus"]` and implement opportunistic connection leasing via `async_get_modbus_unit`. If Core Modbus is active, lease the shared unit; if absent or unconfigured, fall back seamlessly to standalone `modbus-connection` without generating false-alarm Repair issues.
 
 ### Why This Rule Exists
 1. **The Manifest Hard Dependency Failure**: Declaring `"dependencies": ["modbus"]` forces Home Assistant's component loader to verify that Core `modbus` has successfully started before loading `foxess_modern`. In Home Assistant Core 2026.9, Core `modbus` requires a manual `modbus:` block in `configuration.yaml`. If unconfigured, Home Assistant halts integration setup (`(!) Not loaded`), breaking GUI installations.
 2. **The `after_dependencies` Solution**: Declaring `"after_dependencies": ["modbus"]` guarantees that IF Core Modbus is configured in YAML, Home Assistant initializes it before `foxess_modern`. If Core Modbus is NOT configured, Home Assistant proceeds to load `foxess_modern` without blocking.
-3. **Automated Transition & Lifecycle**: When a user later adds `modbus:` to `configuration.yaml` and restarts Home Assistant, `async_setup_entry` automatically discovers the Core Modbus hub, leases Unit 247, and programmatically dismisses the Repairs advisory (`ir.async_delete_issue`). All entity IDs, unique IDs, and historical energy statistics remain 100% continuous.
+3. **Automated Transition & Zero-YAML Autonomy**: Standalone mode is the primary, zero-YAML mode for FoxESS installations with dedicated serial gateways. If a user later chooses to add `modbus:` to `configuration.yaml` for multi-integration RS-485 sharing, `async_setup_entry` automatically discovers the Core Modbus hub and leases Unit 247, while also programmatically cleaning up any legacy Repairs advisory issues (`ir.async_delete_issue`). All entity IDs, unique IDs, and historical energy statistics remain 100% continuous.
 
 ---
 
