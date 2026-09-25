@@ -6,11 +6,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-publish:
+  build:
+    name: Build distribution packages
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write # Required for Trusted Publishing
-
     steps:
       - uses: actions/checkout@v4
 
@@ -19,13 +17,43 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install build tools
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install build
+          pip install ".[dev]" build twine
+
+      - name: Verify zero drift between library and vendored integration
+        run: python scripts/vendor.py --check
+
+      - name: Run pytest test suite
+        run: pytest -v
 
       - name: Build sdist and wheel
         run: python -m build
 
-      - name: Publish package to PyPI
+      - name: Check package metadata with twine
+        run: python -m twine check --strict dist/*
+
+      - name: Store distribution packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+          retention-days: 1
+
+  publish-to-pypi:
+    name: Publish Python distribution to PyPI
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for PyPI Trusted Publishing
+
+    steps:
+      - name: Download distribution packages
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
