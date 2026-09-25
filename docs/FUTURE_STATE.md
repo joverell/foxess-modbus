@@ -14,52 +14,55 @@ The primary architectural goal for `foxess_modern` is full alignment with Home A
 
 ---
 
-## 2. Current State vs. Future State Comparison
+## 2. Current State vs. Target Architecture Comparison
 
-| Architectural Dimension | Current State (Interim Production) | Target Future State |
+| Architectural Dimension | Current Production State | Target Long-Term Architecture |
 | :--- | :--- | :--- |
-| **Connection Management** | `ResilientModbusUnit` manages `ModbusConnection` lifecycle and socket creation | Home Assistant Core Modbus leases shared `ModbusUnit` instances via `async_get_unit` |
-| **Half-Duplex Bus Locking** | `asyncio.Lock` embedded inside `ResilientModbusUnit` | Central bus serialization managed by Core Modbus broker or coordinator bus-lock manager |
-| **Manifest Dependencies** | No Core dependencies (`requirements: ["modbus-connection[tmodbus]"]`) | `"after_dependencies": ["modbus"]` for graceful upgrade with standalone fallback |
-| **Device Layer Interface** | `FoxessDevice` protocol accepts `ModbusUnit` | Native `ModbusUnit` passed directly with zero transport wrappers |
-| **Coordinator Resilience** | Universal timeout debouncing (`self._timeouts < 2`) in `coordinator.py` | Native coordinator debouncing and error reporting standard |
+| **Connection Management** | Home Assistant Core Modbus leases shared `ModbusUnit` via `async_get_unit` with standalone fallback | 100% Core Modbus shared unit leasing |
+| **Half-Duplex Bus Locking** | Mutex (`asyncio.Lock`) decoupled into `FoxessRuntimeData` and coordinator layer | Central bus serialization managed by Core Modbus broker |
+| **Manifest Dependencies** | `"after_dependencies": ["modbus"]` for zero-YAML connection pooling | Standardized load ordering across all Modbus integrations |
+| **Diagnostics Platform** | Native `diagnostics.py` exposing lease status, bus timings, and coordinator health | Standard Home Assistant diagnostic export |
+| **Transceiver Bus Pacing** | Adaptive pacing (nominal `250ms`, scaling to `400ms` during transient timeouts) | Centralized bus timing negotiated with serial bridge |
+| **Coordinator Resilience** | Universal timeout debouncing (`self._timeouts < 2`) across all coordinators | Core DataUpdateCoordinator resilience standard |
 | **PyPI Package Name** | Standalone library packaging configured as `foxess-modern` | Automated PyPI Trusted Publishing via GitHub Actions on release tags |
 
 ---
 
-## 3. Phased Implementation Roadmap
+## 3. Phased Implementation Roadmap Status
 
 ### Phase 1: Decoupling and Encapsulating `ResilientModbusUnit`
 * **Objective**: Remove external dependencies on `ResilientModbusUnit` so coordinators and entity platforms interact cleanly with standard `ModbusUnit` handles.
-* **Status**: In Progress (Interim Production).
-* **Next Actions**:
-  1. Relocate the half-duplex mutual exclusion lock (`asyncio.Lock`) from `ResilientModbusUnit` to `FoxessRuntimeData` or a dedicated `BusLockManager`.
-  2. Streamline `ResilientModbusUnit` so it acts purely as a transport fallback adapter when Core Modbus is unavailable.
+* **Status**: **Complete & Verified**.
+* **Key Achievements**:
+  1. Relocated half-duplex mutual exclusion lock (`asyncio.Lock`) out of `ResilientModbusUnit` into `FoxessRuntimeData.bus_lock` and coordinator instances.
+  2. All entity platforms (`sensor.py`, `select.py`, `number.py`) interact purely with `FoxessDevice` and coordinator data.
+  3. `ResilientModbusUnit` reduced purely to an internal fallback transport adapter when Core Modbus is unavailable.
 
-### Phase 2: Core Modbus Connection Sharing (Achieved & Live)
+### Phase 2: Core Modbus Connection Sharing
 * **Objective**: Enable seamless Core Modbus connection leasing via `homeassistant.components.modbus.async_get_unit` without requiring manual YAML configuration.
-* **Status**: Complete & Verified Live in Core 2026.9.3.
-* **Key Findings & Architecture**:
-  1. In Home Assistant Core 2026.9+, `async_get_unit` creates and pools shared connections on demand under `hass.data[DATA_MODBUS_CONNECTIONS]` directly from config entry parameters (`192.168.86.162:502`).
-  2. Legacy YAML hubs (`get_hub`) are formally deprecated in Core 2026.10 with removal scheduled for Core 2027.10. Manual `modbus:` YAML entries are not required and should be avoided.
-  3. Declared `"after_dependencies": ["modbus"]` in `manifest.json`.
-  4. Integration dynamically leases the unit on startup, setting transceiver pacing (`0.25s`) and connect stabilization delays (`0.05s`).
-  5. Automatic fallback to standalone `modbus-connection` is retained for environments where Core Modbus is not present.
+* **Status**: **Complete & Verified Live in Core 2026.9.3**.
+* **Key Achievements**:
+  1. Leases shared `ModbusUnit` on startup via `async_get_unit`, pooling connections under `hass.data[DATA_MODBUS_CONNECTIONS]` with 0 YAML configuration.
+  2. Automatic multi-device bus sharing without socket contention.
+  3. Fully decoupled from deprecated YAML hubs (`modbus.get_hub`).
+  4. Retains seamless fallback to standalone `modbus-connection` if Core Modbus raises an error.
 
-### Phase 3: Dynamic Diagnostics & Adaptive Pacing
+### Phase 3: Dynamic Diagnostics & Adaptive Transceiver Pacing
 * **Objective**: Add diagnostic visibility and bridge tolerance for lossy Wi-Fi/Ethernet transceivers.
-* **Status**: Ready for Implementation.
-* **Action Items**:
-  1. Add Home Assistant Diagnostics platform (`diagnostics.py`):
-     * Expose transport status (Leased via Core Modbus vs. Standalone fallback).
-     * Expose coordinator telemetry: poll durations, consecutive timeout counters, and recovery timestamps.
-     * Expose device register boundaries, inverter model profile, and detected firmware versions.
-  2. Implement Adaptive Bus Pacing:
-     * Base pacing at 250ms (optimal for FoxESS AUX UART).
-     * Back off to 350-400ms on first timeout to allow saturated RS-485 transceiver buffers to decay, returning to 250ms upon successful read.
+* **Status**: **Complete & Verified Live**.
+* **Key Achievements**:
+  1. Native Diagnostics Platform ([`diagnostics.py`](file:///c:/Users/jover/.gemini/antigravity/scratch/foxess-modbus/custom_components/foxess_modern/diagnostics.py)):
+     * Exposes transport lease status (`is_leased: True`), gateway address (`192.168.86.162:502`), Slave ID `247`, message spacing, and link timeouts.
+     * Exposes coordinator health, intervals, consecutive timeout counters, and failed subsystem sets.
+     * Automatically redacts serial numbers and unique IDs via `async_redact_data`.
+  2. Adaptive Transceiver Bus Pacing:
+     * Base pacing at `250ms` (optimal for FoxESS AUX UART).
+     * Automatically backs off to `400ms` on transient timeouts to let transceiver line ringing and bridge FIFO buffers clear, returning to `250ms` upon successful communication.
+* **Future Extension**: Register boundary auto-discovery if future firmware introduces non-contiguous blocks.
 
 ### Phase 4: PyPI Release & Upstream Repository Alignment
 * **Objective**: Formalize the public release pipeline.
+* **Status**: **Ready (Awaiting User Release Instruction)**.
 * **Action Items**:
   1. Complete PyPI Trusted Publisher registration for package `foxess-modern`.
   2. Maintain CI workflow (`pytest.yaml`) verifying byte-for-byte synchronization between `src/foxess_modbus/` and `custom_components/foxess_modern/device/` via `python scripts/vendor.py --check`.
