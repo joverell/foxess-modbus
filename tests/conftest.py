@@ -32,6 +32,7 @@ ha_modules = [
     "homeassistant.components.sensor",
     "homeassistant.components.select",
     "homeassistant.components.number",
+    "homeassistant.components.diagnostics",
 ]
 
 for name in ha_modules:
@@ -208,6 +209,7 @@ sys.modules["homeassistant.components.number"].NumberDeviceClass = MockNumberDev
 sys.modules["homeassistant.components.number"].NumberMode = MockNumberMode
 sys.modules["homeassistant.components.modbus"].async_get_unit = MagicMock()
 sys.modules["homeassistant.components.modbus"].async_get_temporary_unit = MagicMock()
+sys.modules["homeassistant.components.diagnostics"].async_redact_data = lambda data, to_redact: data
 sys.modules["homeassistant.helpers.update_coordinator"].CoordinatorEntity = MockCoordinatorEntity
 sys.modules["homeassistant.helpers.update_coordinator"].DataUpdateCoordinator = MockDataUpdateCoordinator
 sys.modules["homeassistant.helpers.update_coordinator"].UpdateFailed = MockUpdateFailed

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from datetime import timedelta
 import logging
 
@@ -52,6 +53,7 @@ class FoxessRuntimeData:
     device: Any
     unit: ResilientModbusUnit
     connection: ModbusConnection | None
+    bus_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 type FoxessConfigEntry = ConfigEntry[FoxessRuntimeData]
@@ -67,7 +69,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         duration = int(call.data.get("duration", 3600))
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                bus_lock = getattr(
+                    entry.runtime_data,
+                    "bus_lock",
+                    getattr(entry.runtime_data.unit, "bus_lock", None),
+                )
                 if bus_lock is not None:
                     async with bus_lock:
                         await entry.runtime_data.device.async_set_force_charge(
@@ -87,7 +93,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         duration = int(call.data.get("duration", 3600))
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                bus_lock = getattr(
+                    entry.runtime_data,
+                    "bus_lock",
+                    getattr(entry.runtime_data.unit, "bus_lock", None),
+                )
                 if bus_lock is not None:
                     async with bus_lock:
                         await entry.runtime_data.device.async_set_force_discharge(
@@ -104,7 +114,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         """Handle clear overrides service call."""
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                bus_lock = getattr(
+                    entry.runtime_data,
+                    "bus_lock",
+                    getattr(entry.runtime_data.unit, "bus_lock", None),
+                )
                 if bus_lock is not None:
                     async with bus_lock:
                         await entry.runtime_data.device.async_clear_overrides()
@@ -124,7 +138,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         mode = mode_map.get(mode_str, WorkMode.SELF_USE)
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                bus_lock = getattr(
+                    entry.runtime_data,
+                    "bus_lock",
+                    getattr(entry.runtime_data.unit, "bus_lock", None),
+                )
                 if bus_lock is not None:
                     async with bus_lock:
                         await entry.runtime_data.device.async_set_work_mode(mode)
@@ -163,6 +181,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL, SCAN_INTERVAL)
     )
 
+    bus_lock = asyncio.Lock()
+
     readings_coordinator = FoxessDataUpdateCoordinator(
         hass,
         entry,
@@ -170,6 +190,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         device.async_update_readings,
         timedelta(seconds=scan_interval),
         is_fast_poll=True,
+        bus_lock=bus_lock,
     )
     settings_coordinator = FoxessDataUpdateCoordinator(
         hass,
@@ -178,6 +199,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         device.async_update_settings,
         timedelta(seconds=SETTINGS_SCAN_INTERVAL),
         is_fast_poll=False,
+        bus_lock=bus_lock,
     )
 
     # Initial data refresh
@@ -194,6 +216,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         device=device,
         unit=unit,
         connection=unit.connection,
+        bus_lock=bus_lock,
     )
 
     entry.async_on_unload(entry.add_update_listener(update_listener))

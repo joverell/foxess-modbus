@@ -7,13 +7,15 @@ from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant.helpers.update_coordinator import UpdateFailed
 from modbus_connection.exceptions import ModbusConnectionError, ModbusError, ModbusTimeoutError
 from modbus_connection.mock import MockModbusConnection
 from modbus_connection.model import UpdateReport
 
 from foxess_modbus import FoxessKH10Inverter
-from custom_components.foxess_modern.coordinator import FoxessDataUpdateCoordinator
+from custom_components.foxess_modern.coordinator import (
+    FoxessDataUpdateCoordinator,
+    UpdateFailed,
+)
 from custom_components.foxess_modern.sensor import (
     BASE_SENSOR_DESCRIPTIONS,
     FoxessEnergySensor,
@@ -253,7 +255,8 @@ async def test_standalone_fallback_connection():
     """Verify fallback creates a standalone connection when Core Modbus is not present."""
     from custom_components.foxess_modern.connection import async_get_modbus_unit
 
-    with patch.dict("sys.modules", {"homeassistant.components.modbus": None}):
+    mock_modbus = MagicMock(spec=[])
+    with patch.dict("sys.modules", {"homeassistant.components.modbus": mock_modbus}):
         with patch("custom_components.foxess_modern.connection.ModbusConnection") as mock_conn_cls:
             mock_conn = MagicMock()
             mock_conn.for_unit = MagicMock()
@@ -330,6 +333,53 @@ async def test_repairs_advisory_issue_lifecycle():
         mock_ir.async_delete_issue.reset_mock()
         assert await async_unload_entry(mock_hass, mock_entry) is True
         mock_ir.async_delete_issue.assert_called_once_with(mock_hass, "foxess_modern", "modbus_standalone_advisory_test_entry_456")
+
+
+@pytest.mark.asyncio
+async def test_adaptive_transceiver_pacing():
+    """Verify coordinator backs off pacing to 400ms on timeout and restores 250ms on success."""
+    from custom_components.foxess_modern.coordinator import FoxessDataUpdateCoordinator
+    from modbus_connection import ModbusTimeoutError
+    from modbus_connection.model import UpdateReport
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.unique_id = "test_inv_123"
+
+    mock_unit = MagicMock()
+    mock_unit.set_message_spacing = MagicMock()
+
+    mock_device = MagicMock()
+    mock_device.modbus_unit = mock_unit
+
+    update_fn = AsyncMock()
+    coord = FoxessDataUpdateCoordinator(
+        mock_hass,
+        mock_entry,
+        mock_device,
+        update_fn,
+        timedelta(seconds=15),
+    )
+
+    # 1. On timeout, message spacing backs off to 0.40s
+    update_fn.side_effect = ModbusTimeoutError("Timeout on test")
+    with pytest.raises(Exception):
+        await coord._do_update_data()
+    assert coord.timeouts == 1
+    mock_unit.set_message_spacing.assert_called_with(0.40)
+
+    # 2. On subsequent success, message spacing restores to 0.25s
+    mock_report = MagicMock(spec=UpdateReport)
+    mock_report.updated = True
+    mock_report.failed = {}
+    update_fn.side_effect = None
+    update_fn.return_value = mock_report
+
+    res = await coord._do_update_data()
+    assert res is mock_report
+    assert coord.timeouts == 0
+    mock_unit.set_message_spacing.assert_called_with(0.25)
+
 
 
 

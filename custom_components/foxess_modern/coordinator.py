@@ -32,6 +32,7 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
         update_method: Callable[[], Any],
         update_interval: timedelta,
         is_fast_poll: bool = False,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -45,8 +46,14 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
         self.device = device
         self._update_method = update_method
         self._is_fast_poll = is_fast_poll
+        self._bus_lock = bus_lock
         self._timeouts = 0
         self._failed_subsystems: frozenset[str] = frozenset()
+
+    @property
+    def timeouts(self) -> int:
+        """Return consecutive timeout count."""
+        return self._timeouts
 
     @property
     def is_available(self) -> bool:
@@ -69,7 +76,7 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
 
     async def _async_update_data(self) -> UpdateReport:
         """Fetch the latest data from the inverter, serialized via bus_lock."""
-        bus_lock = getattr(getattr(self.device, "modbus_unit", None), "bus_lock", None)
+        bus_lock = self._bus_lock or getattr(getattr(self.device, "modbus_unit", None), "bus_lock", None)
         if bus_lock is not None:
             async with bus_lock:
                 return await self._do_update_data()
@@ -81,9 +88,12 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
             report: UpdateReport = await self._update_method()
         except ModbusTimeoutError as err:
             self._timeouts += 1
+            unit = getattr(self.device, "modbus_unit", None)
+            if unit and hasattr(unit, "set_message_spacing"):
+                # Back off pacing to 400ms to allow saturated transceiver buffers to clear
+                unit.set_message_spacing(0.40)
             if self._timeouts >= 3:
                 # Serial-to-network bridge wedged, recycle link
-                unit = getattr(self.device, "modbus_unit", None)
                 if unit and hasattr(unit, "disconnect"):
                     _LOGGER.warning(
                         "Link unresponsive after %d consecutive timeouts: recycling Modbus connection",
@@ -96,6 +106,11 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
         except Exception as err:
             raise UpdateFailed(f"Unexpected error communicating with FoxESS: {err}") from err
 
+        if self._timeouts > 0:
+            unit = getattr(self.device, "modbus_unit", None)
+            if unit and hasattr(unit, "set_message_spacing"):
+                # Restore nominal 250ms pacing upon successful communication
+                unit.set_message_spacing(0.25)
         self._timeouts = 0
 
         if not report.updated:
