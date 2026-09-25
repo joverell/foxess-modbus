@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "foxess-modbus"
+name = "foxess-modern"
 version = "0.1.8"
 description = "Modern, standalone Python library for FoxESS inverters using modbus-connection."
 readme = "README.md"

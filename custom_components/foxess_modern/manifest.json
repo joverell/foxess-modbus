@@ -1,6 +1,7 @@
 {
   "domain": "foxess_modern",
   "name": "FoxESS Modern (modbus-connection)",
+  "after_dependencies": ["modbus"],
   "codeowners": ["@joverell"],
   "config_flow": true,
   "documentation": "https://github.com/joverell/foxess-modbus",

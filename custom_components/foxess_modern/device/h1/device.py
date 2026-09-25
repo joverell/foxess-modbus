@@ -5,10 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from modbus_connection.model import Raw, UpdateReport
-
+from modbus_connection.model import Raw
 from ..const import WorkMode
-from ..model import FoxessDevice
+from ..model import FoxessDevice, UpdateReport
 from .battery import FoxessH1Battery
 from .control import FoxessH1Control
 from .grid import FoxessH1Grid

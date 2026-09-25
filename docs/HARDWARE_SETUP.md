@@ -237,8 +237,8 @@ To maintain high reliability across different network environments (especially o
    * Telemetry is gathered in small, predictable transactions. This keeps the serial bus clear and strictly prevents buffer saturation on FoxESS AUX UART microcontrollers or latency-prone wireless bridges.
    * Note: While certain hardwired, direct-serial installations might technically tolerate wider spans, limiting transactions to 8 registers represents a proven, defensive standard that ensures complete immunity from microcontroller serial lockups across all FoxESS hardware revisions.
 
-2. **Inter-Frame Timing Safeguards (`message_spacing = 80ms`):**
-   * Enforces an 80 ms rest interval between consecutive Modbus transactions, giving the inverter processor and the gateway transceiver sufficient time to clear their receive buffers.
+2. **Inter-Frame Timing Safeguards (`message_spacing = 250ms`):**
+   * Enforces a 250 ms (`0.25s`) rest interval between consecutive Modbus transactions, giving the inverter AUX microcontroller and the gateway transceiver sufficient decay time to clear their receive buffers.
 
 3. **Coordinated Write Locking (`modbus-connection`):**
    * All read and write operations pass through Home Assistant's central asynchronous queue broker.
@@ -247,6 +247,10 @@ To maintain high reliability across different network environments (especially o
 4. **Staggered Polling Cycles:**
    * Dynamic operational readings (power, voltage, SoC) poll every 15 seconds (`SCAN_INTERVAL = 15`).
    * Configuration parameters (configured Min SoC, charge windows) poll every 60 seconds (`SETTINGS_SCAN_INTERVAL = 60`).
+
+5. **Universal Coordinator Debouncing:**
+   * Wireless gateways located near switchboards or outdoor meter boxes experience occasional dropped Wi-Fi packets or TCP retransmission jitter.
+   * Inverter data in memory remains valid across transient timeouts. Coordinators debounce single poll failures (`self._timeouts < 2 and self.data is not None`), preventing entities like `Export Power Limit`, `Min SoC`, or `Work Mode` from flapping to `Unavailable` during isolated packet drops, while still recycling wedged bridge connections if 3 consecutive timeouts occur.
 
 ---
 
@@ -296,10 +300,33 @@ If you must use Wi-Fi and experience periodic TCP connection resets or timeout l
 
 ---
 
-## 9. External References & Sourced Documentation
+## 9. Multi-Device RS-485 Bus Sharing with Core Modbus
+
+If you connect multiple Modbus slave devices to the same physical RS-485 gateway (for example, the FoxESS Inverter on Slave ID 247, an Eastron SDM630 Grid Meter on Slave ID 1, and an EV Charger on Slave ID 2), having separate integrations open independent TCP connections causes serial collision errors on the half-duplex wire.
+
+To enable centralized connection pooling and serial bus locking across multiple integrations, configure a shared Modbus gateway hub in `configuration.yaml`:
+
+```yaml
+modbus:
+  - name: "waveshare_gateway"
+    type: tcp
+    host: 192.168.86.162
+    port: 502
+    timeout: 5
+    message_wait_milliseconds: 250
+```
+
+### Automatic Promotion in `foxess_modern`
+* When `modbus:` is present in `configuration.yaml`, `foxess_modern` automatically detects the shared gateway on startup, leases Slave ID 247 from Core Modbus, and automatically dismisses the Standalone Repairs advisory.
+* If `modbus:` is not configured in YAML, `foxess_modern` runs seamlessly in standalone mode using its internal `modbus-connection` transport with zero manual configuration required.
+
+---
+
+## 10. External References & Sourced Documentation
 
 * [Waveshare RS485 TO ETH / WIFI User Manual & Wiki](https://www.waveshare.com/wiki/RS485_TO_ETH)
 * [Home Assistant Modbus Integration Documentation](https://www.home-assistant.io/integrations/modbus/)
 * [Home Assistant Developer Blog: Modernizing Modbus (Core 2026.7+)](https://developers.home-assistant.io/blog/2026/07/05/modernizing-modbus/)
 * [modbus-connection Python Library Reference](https://home-assistant-libs.github.io/modbus-connection/)
 * [FoxESS KH Series Single-Phase Hybrid Inverter User Manual](https://www.fox-ess.com/)
+

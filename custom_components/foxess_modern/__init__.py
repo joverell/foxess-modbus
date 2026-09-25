@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from datetime import timedelta
 import logging
 
@@ -11,8 +12,9 @@ from homeassistant.const import Platform
 from typing import Any
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 
-from .connection import ResilientModbusUnit
+from .connection import ResilientModbusUnit, async_get_modbus_unit
 from .const import (
     CONF_HOST,
     CONF_PORT,
@@ -27,6 +29,8 @@ from .device import create_inverter
 from .device.const import WorkMode
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -51,7 +55,8 @@ class FoxessRuntimeData:
     settings_coordinator: FoxessDataUpdateCoordinator
     device: Any
     unit: ResilientModbusUnit
-    connection: ModbusConnection
+    connection: ModbusConnection | None
+    bus_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 type FoxessConfigEntry = ConfigEntry[FoxessRuntimeData]
@@ -67,7 +72,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         duration = int(call.data.get("duration", 3600))
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                bus_lock = getattr(
+                    entry.runtime_data,
+                    "bus_lock",
+                    getattr(entry.runtime_data.unit, "bus_lock", None),
+                )
                 if bus_lock is not None:
                     async with bus_lock:
                         await entry.runtime_data.device.async_set_force_charge(
@@ -87,7 +96,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         duration = int(call.data.get("duration", 3600))
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                bus_lock = getattr(
+                    entry.runtime_data,
+                    "bus_lock",
+                    getattr(entry.runtime_data.unit, "bus_lock", None),
+                )
                 if bus_lock is not None:
                     async with bus_lock:
                         await entry.runtime_data.device.async_set_force_discharge(
@@ -104,7 +117,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         """Handle clear overrides service call."""
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                bus_lock = getattr(
+                    entry.runtime_data,
+                    "bus_lock",
+                    getattr(entry.runtime_data.unit, "bus_lock", None),
+                )
                 if bus_lock is not None:
                     async with bus_lock:
                         await entry.runtime_data.device.async_clear_overrides()
@@ -124,7 +141,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         mode = mode_map.get(mode_str, WorkMode.SELF_USE)
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
-                bus_lock = getattr(entry.runtime_data.unit, "bus_lock", None)
+                bus_lock = getattr(
+                    entry.runtime_data,
+                    "bus_lock",
+                    getattr(entry.runtime_data.unit, "bus_lock", None),
+                )
                 if bus_lock is not None:
                     async with bus_lock:
                         await entry.runtime_data.device.async_set_work_mode(mode)
@@ -156,12 +177,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
     unit_id = entry.data[CONF_UNIT_ID]
     serial = entry.unique_id or f"{host}_{port}_{unit_id}"
 
-    unit = ResilientModbusUnit(host=host, port=port, unit_id=unit_id)
+    unit = async_get_modbus_unit(hass, entry, host=host, port=port, unit_id=unit_id)
     device = create_inverter(unit, serial_number=serial, model=entry.data.get("model"))
 
     scan_interval = entry.options.get(
         CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL, SCAN_INTERVAL)
     )
+
+    bus_lock = asyncio.Lock()
 
     readings_coordinator = FoxessDataUpdateCoordinator(
         hass,
@@ -170,6 +193,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         device.async_update_readings,
         timedelta(seconds=scan_interval),
         is_fast_poll=True,
+        bus_lock=bus_lock,
     )
     settings_coordinator = FoxessDataUpdateCoordinator(
         hass,
@@ -178,6 +202,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         device.async_update_settings,
         timedelta(seconds=SETTINGS_SCAN_INTERVAL),
         is_fast_poll=False,
+        bus_lock=bus_lock,
     )
 
     # Initial data refresh
@@ -194,6 +219,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
         device=device,
         unit=unit,
         connection=unit.connection,
+        bus_lock=bus_lock,
     )
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
@@ -201,6 +227,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
     from .migration import async_migrate_entity_registry
 
     await async_migrate_entity_registry(hass, entry)
+
+    # Manage Repairs advisory for shared Core Modbus gateway pooling
+    try:
+        from homeassistant.helpers import issue_registry as ir
+
+        repair_issue_id = f"modbus_standalone_advisory_{entry.entry_id}"
+        if unit.is_leased:
+            ir.async_delete_issue(hass, DOMAIN, repair_issue_id)
+        else:
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                repair_issue_id,
+                is_fixable=False,
+                is_persistent=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="modbus_standalone_advisory",
+                translation_placeholders={
+                    "host": host,
+                    "port": str(port),
+                },
+            )
+    except Exception as issue_err:
+        _LOGGER.debug("Could not update issue registry: %s", issue_err)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -213,7 +263,15 @@ async def update_listener(hass: HomeAssistant, entry: FoxessConfigEntry) -> None
 
 async def async_unload_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bool:
     """Unload a config entry."""
+    try:
+        from homeassistant.helpers import issue_registry as ir
+
+        ir.async_delete_issue(hass, DOMAIN, f"modbus_standalone_advisory_{entry.entry_id}")
+    except Exception:
+        pass
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok and hasattr(entry, "runtime_data") and entry.runtime_data:
-        await entry.runtime_data.connection.close()
+        await entry.runtime_data.unit.close()
     return unload_ok
+

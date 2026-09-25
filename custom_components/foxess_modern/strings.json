@@ -62,5 +62,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "modbus_standalone_advisory": {
+      "title": "FoxESS Modern running in Standalone Connection mode",
+      "description": "FoxESS Modern is currently connected directly to `{host}:{port}` via its built-in Modbus transport.\n\nIf you have other devices (such as energy meters, EV chargers, or secondary inverters) sharing this RS-485 serial gateway, configure a shared Modbus hub in `configuration.yaml` to enable central connection pooling and prevent serial bus collisions:\n\n```yaml\nmodbus:\n  - name: waveshare_gateway\n    type: tcp\n    host: {host}\n    port: {port}\n    timeout: 5\n    message_wait_milliseconds: 250\n```\n\nOnce added, restart Home Assistant and FoxESS Modern will automatically transition to the shared Core Modbus connection."
+    }
   }
 }

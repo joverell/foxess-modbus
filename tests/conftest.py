@@ -27,11 +27,13 @@ ha_modules = [
     "homeassistant.helpers.entity_platform",
     "homeassistant.helpers.update_coordinator",
     "homeassistant.helpers.entity_registry",
+    "homeassistant.helpers.config_validation",
     "homeassistant.components",
     "homeassistant.components.modbus",
     "homeassistant.components.sensor",
     "homeassistant.components.select",
     "homeassistant.components.number",
+    "homeassistant.components.diagnostics",
 ]
 
 for name in ha_modules:
@@ -39,6 +41,12 @@ for name in ha_modules:
         mod = types.ModuleType(name)
         mod.__path__ = []
         sys.modules[name] = mod
+
+# Mock config_validation
+cv_mod = sys.modules["homeassistant.helpers.config_validation"]
+cv_mod.config_entry_only_config_schema = lambda domain: lambda config: config
+cv_mod.empty_config_schema = lambda domain: lambda config: config
+sys.modules["homeassistant.helpers"].config_validation = cv_mod
 
 
 class MockHomeAssistantError(Exception):
@@ -208,6 +216,7 @@ sys.modules["homeassistant.components.number"].NumberDeviceClass = MockNumberDev
 sys.modules["homeassistant.components.number"].NumberMode = MockNumberMode
 sys.modules["homeassistant.components.modbus"].async_get_unit = MagicMock()
 sys.modules["homeassistant.components.modbus"].async_get_temporary_unit = MagicMock()
+sys.modules["homeassistant.components.diagnostics"].async_redact_data = lambda data, to_redact: data
 sys.modules["homeassistant.helpers.update_coordinator"].CoordinatorEntity = MockCoordinatorEntity
 sys.modules["homeassistant.helpers.update_coordinator"].DataUpdateCoordinator = MockDataUpdateCoordinator
 sys.modules["homeassistant.helpers.update_coordinator"].UpdateFailed = MockUpdateFailed
