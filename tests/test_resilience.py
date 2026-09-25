@@ -208,8 +208,11 @@ async def test_core_modbus_unit_leasing():
     mock_modbus_module = MagicMock()
     mock_modbus_module.async_get_unit = MagicMock(return_value=mock_core_unit)
 
+    mock_hass = MagicMock()
+    mock_hass.data = {"modbus": MagicMock()}
+
     with patch.dict("sys.modules", {"homeassistant.components.modbus": mock_modbus_module}):
-        unit = async_get_modbus_unit(MagicMock(), MagicMock(), "192.168.1.100", 502, 247)
+        unit = async_get_modbus_unit(mock_hass, MagicMock(), "192.168.1.100", 502, 247)
         assert unit.is_leased is True
         mock_core_unit.set_message_spacing.assert_called_once_with(0.25)
         mock_core_unit.require_connect_delay.assert_called_once_with(0.05)
@@ -259,5 +262,74 @@ async def test_standalone_fallback_connection():
             unit = async_get_modbus_unit(MagicMock(), MagicMock(), "127.0.0.1", 502, 247)
             assert unit.is_leased is False
             assert unit.connection is mock_conn
+
+
+@pytest.mark.asyncio
+async def test_repairs_advisory_issue_lifecycle():
+    """Verify standalone connection creates a Repairs issue and leased connection deletes it."""
+    from custom_components.foxess_modern import async_setup_entry, async_unload_entry
+
+    mock_hass = MagicMock()
+    mock_hass.data = {}
+    mock_hass.config_entries.async_forward_entry_setups = AsyncMock(return_value=True)
+    mock_hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "test_entry_456"
+    mock_entry.unique_id = "192.168.86.162_502_247"
+    mock_entry.data = {
+        "host": "192.168.86.162",
+        "port": 502,
+        "unit_id": 247,
+        "model": "KH10",
+    }
+    mock_entry.options = {}
+    mock_entry.add_update_listener = MagicMock()
+
+    mock_unit = MagicMock()
+    mock_unit.is_leased = False
+    mock_unit.connection = MagicMock()
+    mock_unit.close = AsyncMock()
+
+    mock_device = MagicMock()
+    mock_device.async_update_readings = AsyncMock(return_value=MagicMock())
+    mock_device.async_update_settings = AsyncMock(return_value=MagicMock())
+
+    mock_ir = MagicMock()
+    mock_ir.IssueSeverity.WARNING = "warning"
+    mock_ir.async_create_issue = MagicMock()
+    mock_ir.async_delete_issue = MagicMock()
+
+    with patch.dict("sys.modules", {"homeassistant.helpers.issue_registry": mock_ir}), \
+         patch("custom_components.foxess_modern.async_get_modbus_unit", return_value=mock_unit), \
+         patch("custom_components.foxess_modern.create_inverter", return_value=mock_device), \
+         patch("custom_components.foxess_modern.FoxessDataUpdateCoordinator") as mock_coord_cls, \
+         patch("custom_components.foxess_modern.migration.async_migrate_entity_registry", new=AsyncMock()):
+
+        mock_coord = MagicMock()
+        mock_coord.async_config_entry_first_refresh = AsyncMock()
+        mock_coord.async_refresh = AsyncMock()
+        mock_coord_cls.return_value = mock_coord
+
+        # 1. Setup in standalone mode creates Repairs advisory issue
+        assert await async_setup_entry(mock_hass, mock_entry) is True
+        mock_ir.async_create_issue.assert_called_once()
+        args, kwargs = mock_ir.async_create_issue.call_args
+        assert kwargs["translation_key"] == "modbus_standalone_advisory"
+        assert kwargs["translation_placeholders"]["host"] == "192.168.86.162"
+
+        # 2. Setup with leased unit clears Repairs advisory issue
+        mock_unit.is_leased = True
+        mock_ir.async_create_issue.reset_mock()
+        mock_ir.async_delete_issue.reset_mock()
+        assert await async_setup_entry(mock_hass, mock_entry) is True
+        mock_ir.async_delete_issue.assert_called_once_with(mock_hass, "foxess_modern", "modbus_standalone_advisory_test_entry_456")
+        mock_ir.async_create_issue.assert_not_called()
+
+        # 3. Unload cleans up any existing issue
+        mock_ir.async_delete_issue.reset_mock()
+        assert await async_unload_entry(mock_hass, mock_entry) is True
+        mock_ir.async_delete_issue.assert_called_once_with(mock_hass, "foxess_modern", "modbus_standalone_advisory_test_entry_456")
+
 
 

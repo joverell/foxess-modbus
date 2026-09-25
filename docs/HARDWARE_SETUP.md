@@ -300,10 +300,33 @@ If you must use Wi-Fi and experience periodic TCP connection resets or timeout l
 
 ---
 
-## 9. External References & Sourced Documentation
+## 9. Multi-Device RS-485 Bus Sharing with Core Modbus
+
+If you connect multiple Modbus slave devices to the same physical RS-485 gateway (for example, the FoxESS Inverter on Slave ID 247, an Eastron SDM630 Grid Meter on Slave ID 1, and an EV Charger on Slave ID 2), having separate integrations open independent TCP connections causes serial collision errors on the half-duplex wire.
+
+To enable centralized connection pooling and serial bus locking across multiple integrations, configure a shared Modbus gateway hub in `configuration.yaml`:
+
+```yaml
+modbus:
+  - name: "waveshare_gateway"
+    type: tcp
+    host: 192.168.86.162
+    port: 502
+    timeout: 5
+    message_wait_milliseconds: 250
+```
+
+### Automatic Promotion in `foxess_modern`
+* When `modbus:` is present in `configuration.yaml`, `foxess_modern` automatically detects the shared gateway on startup, leases Slave ID 247 from Core Modbus, and automatically dismisses the Standalone Repairs advisory.
+* If `modbus:` is not configured in YAML, `foxess_modern` runs seamlessly in standalone mode using its internal `modbus-connection` transport with zero manual configuration required.
+
+---
+
+## 10. External References & Sourced Documentation
 
 * [Waveshare RS485 TO ETH / WIFI User Manual & Wiki](https://www.waveshare.com/wiki/RS485_TO_ETH)
 * [Home Assistant Modbus Integration Documentation](https://www.home-assistant.io/integrations/modbus/)
 * [Home Assistant Developer Blog: Modernizing Modbus (Core 2026.7+)](https://developers.home-assistant.io/blog/2026/07/05/modernizing-modbus/)
 * [modbus-connection Python Library Reference](https://home-assistant-libs.github.io/modbus-connection/)
 * [FoxESS KH Series Single-Phase Hybrid Inverter User Manual](https://www.fox-ess.com/)
+

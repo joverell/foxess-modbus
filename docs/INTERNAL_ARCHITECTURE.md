@@ -301,7 +301,19 @@ where = ["src"]
 
 ---
 
-## 11. Summary Checklist for Code Reviews
+## 11. Invariant 10: Opportunistic Core Modbus Leasing and Repairs Advisory
+
+### The Rule
+Never declare `"dependencies": ["modbus"]` in `manifest.json`. Always declare `"after_dependencies": ["modbus"]` and implement opportunistic connection leasing via `async_get_modbus_unit`. If Core Modbus is active, lease the shared unit; if absent or unconfigured, fall back seamlessly to standalone `modbus-connection` and register a non-breaking Repairs advisory (`modbus_standalone_advisory`).
+
+### Why This Rule Exists
+1. **The Manifest Hard Dependency Failure**: Declaring `"dependencies": ["modbus"]` forces Home Assistant's component loader to verify that Core `modbus` has successfully started before loading `foxess_modern`. In Home Assistant Core 2026.9, Core `modbus` requires a manual `modbus:` block in `configuration.yaml`. If unconfigured, Home Assistant halts integration setup (`(!) Not loaded`), breaking GUI installations.
+2. **The `after_dependencies` Solution**: Declaring `"after_dependencies": ["modbus"]` guarantees that IF Core Modbus is configured in YAML, Home Assistant initializes it before `foxess_modern`. If Core Modbus is NOT configured, Home Assistant proceeds to load `foxess_modern` without blocking.
+3. **Automated Transition & Lifecycle**: When a user later adds `modbus:` to `configuration.yaml` and restarts Home Assistant, `async_setup_entry` automatically discovers the Core Modbus hub, leases Unit 247, and programmatically dismisses the Repairs advisory (`ir.async_delete_issue`). All entity IDs, unique IDs, and historical energy statistics remain 100% continuous.
+
+---
+
+## 12. Summary Checklist for Code Reviews
 
 Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Does the change use Core Modbus unit leasing (`async_get_unit`) with fallback to `modbus_connection.tmodbus.ModbusConnection`?
@@ -314,6 +326,8 @@ Before merging changes to `src/` or `custom_components/foxess_modern/`:
 * [ ] Are power entities (`W`) and energy entities (`kWh`) strictly separated in migration aliases?
 * [ ] Does the options flow use `SelectSelector` with string values and pre-selected defaults?
 * [ ] Is the PyPI distribution package name configured as `foxess-modern`?
+* [ ] Are manifest dependencies configured as `"after_dependencies": ["modbus"]` (never hard `"dependencies"`)?
 * [ ] Are `src/foxess_modbus/` and `custom_components/foxess_modern/device/` 100% synchronized via `python scripts/vendor.py --check`?
 * [ ] Do all tests in `pytest tests/` pass?
+
 

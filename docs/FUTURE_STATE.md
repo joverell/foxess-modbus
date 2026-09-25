@@ -37,18 +37,20 @@ The primary architectural goal for `foxess_modern` is full alignment with Home A
   3. Ensure `device.async_update_readings()` and `device.async_update_settings()` accept pure `ModbusUnit` protocol implementations.
   4. Reduce `ResilientModbusUnit` to an internal fallback transport adapter used only when Core Modbus connection leasing is absent.
 
-### Phase 2: Core Modbus Connection Sharing (Upstream Dependent)
-* **Objective**: Adopt `homeassistant.components.modbus.async_get_unit` without breaking installations lacking manual YAML configuration.
+### Phase 2: Core Modbus Connection Sharing & Advisory Architecture (Option A)
+* **Objective**: Enable seamless Core Modbus connection leasing via `homeassistant.components.modbus.async_get_unit` while preserving instant zero-YAML GUI setup.
 * **Context & Limitations**:
-  * In Home Assistant Core 2026.9, Core `modbus` remains an optional component that requires a `modbus:` block in `configuration.yaml`.
-  * Declaring `"dependencies": ["modbus"]` in `manifest.json` blocks integration startup if Core `modbus` is unconfigured.
-* **Target Actions**:
-  1. When Home Assistant Core introduces UI configuration or automatic setup for shared Modbus gateways, declare `"after_dependencies": ["modbus"]`.
-  2. Implement opportunistic leasing:
-     * Check if Core Modbus connection sharing is active.
-     * If active, call `async_get_unit(hass, entry, params, unit_id)`.
-     * If inactive, smoothly fall back to the standalone `modbus_connection.tmodbus.ModbusConnection` instance.
-  3. This ensures users never need manual YAML setup to run `foxess_modern`.
+  * In Home Assistant Core 2026.9, Core `modbus` remains an optional component requiring manual `modbus:` YAML configuration.
+  * Hard `"dependencies": ["modbus"]` blocks startup if Core `modbus` is unconfigured.
+* **Implemented Standard (Option A)**:
+  1. Declared `"after_dependencies": ["modbus"]` in `manifest.json`.
+  2. Implemented opportunistic leasing in `async_get_modbus_unit`:
+     * Checks if `"modbus"` is present in `hass.data`.
+     * If present, leases the shared unit via `async_get_unit` and automatically clears the Repairs advisory.
+     * If absent, cleanly falls back to standalone `modbus-connection` and registers a native Home Assistant Repairs advisory (`modbus_standalone_advisory`).
+  3. Automatic Promotion:
+     * When a user adds the recommended `modbus:` snippet to `configuration.yaml` and restarts Home Assistant, the integration promotes to the shared Core Modbus unit automatically.
+     * All 71 entities, unique IDs, and historical statistics remain continuous with zero disruption.
 
 ### Phase 3: Dynamic Register Planning & Diagnostics
 * **Objective**: Enhance auto-tuning and diagnostics over lossy wireless bridges.

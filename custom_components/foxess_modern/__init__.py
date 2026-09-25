@@ -156,7 +156,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
     unit_id = entry.data[CONF_UNIT_ID]
     serial = entry.unique_id or f"{host}_{port}_{unit_id}"
 
-    unit = ResilientModbusUnit(host=host, port=port, unit_id=unit_id)
+    unit = async_get_modbus_unit(hass, entry, host=host, port=port, unit_id=unit_id)
     device = create_inverter(unit, serial_number=serial, model=entry.data.get("model"))
 
     scan_interval = entry.options.get(
@@ -202,6 +202,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bo
 
     await async_migrate_entity_registry(hass, entry)
 
+    # Manage Repairs advisory for shared Core Modbus gateway pooling
+    try:
+        from homeassistant.helpers import issue_registry as ir
+
+        repair_issue_id = f"modbus_standalone_advisory_{entry.entry_id}"
+        if unit.is_leased:
+            ir.async_delete_issue(hass, DOMAIN, repair_issue_id)
+        else:
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                repair_issue_id,
+                is_fixable=False,
+                is_persistent=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="modbus_standalone_advisory",
+                translation_placeholders={
+                    "host": host,
+                    "port": str(port),
+                },
+            )
+    except Exception as issue_err:
+        _LOGGER.debug("Could not update issue registry: %s", issue_err)
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
@@ -213,6 +237,13 @@ async def update_listener(hass: HomeAssistant, entry: FoxessConfigEntry) -> None
 
 async def async_unload_entry(hass: HomeAssistant, entry: FoxessConfigEntry) -> bool:
     """Unload a config entry."""
+    try:
+        from homeassistant.helpers import issue_registry as ir
+
+        ir.async_delete_issue(hass, DOMAIN, f"modbus_standalone_advisory_{entry.entry_id}")
+    except Exception:
+        pass
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok and hasattr(entry, "runtime_data") and entry.runtime_data:
         await entry.runtime_data.unit.close()
