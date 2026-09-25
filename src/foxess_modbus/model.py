@@ -2,7 +2,29 @@
 
 from __future__ import annotations
 
-from modbus_connection.model import Component, Device
+from modbus_connection.model import Component
+
+try:
+    from modbus_connection.model import Device
+except ImportError:
+    try:
+        from modbus_connection.model.device import Device
+    except ImportError:
+        from modbus_connection import ModbusUnit
+
+        class Device:
+            """Minimal Device protocol fallback."""
+
+            def __init__(self, unit: ModbusUnit) -> None:
+                self.modbus_unit = unit
+
+try:
+    from modbus_connection.model import Raw
+except ImportError:
+    try:
+        from modbus_connection.model._const import Raw
+    except ImportError:
+        Raw = dict[str, dict[int, int | bool]]
 
 try:
     from modbus_connection.model import UpdateReport
