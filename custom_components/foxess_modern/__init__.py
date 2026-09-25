@@ -12,6 +12,7 @@ from homeassistant.const import Platform
 from typing import Any
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 
 from .connection import ResilientModbusUnit, async_get_modbus_unit
 from .const import (
@@ -28,6 +29,8 @@ from .device import create_inverter
 from .device.const import WorkMode
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,

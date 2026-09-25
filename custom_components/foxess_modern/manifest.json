@@ -1,9 +1,9 @@
 {
   "domain": "foxess_modern",
   "name": "FoxESS Modern (modbus-connection)",
+  "after_dependencies": ["modbus"],
   "codeowners": ["@joverell"],
   "config_flow": true,
-  "after_dependencies": ["modbus"],
   "documentation": "https://github.com/joverell/foxess-modbus",
   "integration_type": "device",
   "iot_class": "local_polling",

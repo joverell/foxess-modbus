@@ -27,6 +27,7 @@ ha_modules = [
     "homeassistant.helpers.entity_platform",
     "homeassistant.helpers.update_coordinator",
     "homeassistant.helpers.entity_registry",
+    "homeassistant.helpers.config_validation",
     "homeassistant.components",
     "homeassistant.components.modbus",
     "homeassistant.components.sensor",
@@ -40,6 +41,12 @@ for name in ha_modules:
         mod = types.ModuleType(name)
         mod.__path__ = []
         sys.modules[name] = mod
+
+# Mock config_validation
+cv_mod = sys.modules["homeassistant.helpers.config_validation"]
+cv_mod.config_entry_only_config_schema = lambda domain: lambda config: config
+cv_mod.empty_config_schema = lambda domain: lambda config: config
+sys.modules["homeassistant.helpers"].config_validation = cv_mod
 
 
 class MockHomeAssistantError(Exception):
