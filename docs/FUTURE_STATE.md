@@ -30,34 +30,33 @@ The primary architectural goal for `foxess_modern` is full alignment with Home A
 ## 3. Phased Implementation Roadmap
 
 ### Phase 1: Decoupling and Encapsulating `ResilientModbusUnit`
-* **Objective**: Remove all external dependencies on `ResilientModbusUnit` methods outside `connection.py`.
-* **Action Items**:
-  1. Move the `asyncio.Lock` out of `ResilientModbusUnit` and into a dedicated `BusLockManager` or directly into the coordinators.
-  2. Ensure all entity platforms (`sensor.py`, `select.py`, `number.py`) only interact with `FoxessDevice` and never access transport connection handles.
-  3. Ensure `device.async_update_readings()` and `device.async_update_settings()` accept pure `ModbusUnit` protocol implementations.
-  4. Reduce `ResilientModbusUnit` to an internal fallback transport adapter used only when Core Modbus connection leasing is absent.
+* **Objective**: Remove external dependencies on `ResilientModbusUnit` so coordinators and entity platforms interact cleanly with standard `ModbusUnit` handles.
+* **Status**: In Progress (Interim Production).
+* **Next Actions**:
+  1. Relocate the half-duplex mutual exclusion lock (`asyncio.Lock`) from `ResilientModbusUnit` to `FoxessRuntimeData` or a dedicated `BusLockManager`.
+  2. Streamline `ResilientModbusUnit` so it acts purely as a transport fallback adapter when Core Modbus is unavailable.
 
-### Phase 2: Core Modbus Connection Sharing & Advisory Architecture (Option A)
-* **Objective**: Enable seamless Core Modbus connection leasing via `homeassistant.components.modbus.async_get_unit` while preserving instant zero-YAML GUI setup.
-* **Context & Limitations**:
-  * In Home Assistant Core 2026.9, Core `modbus` remains an optional component requiring manual `modbus:` YAML configuration.
-  * Hard `"dependencies": ["modbus"]` blocks startup if Core `modbus` is unconfigured.
-* **Implemented Standard (Option A)**:
-  1. Declared `"after_dependencies": ["modbus"]` in `manifest.json`.
-  2. Implemented opportunistic leasing in `async_get_modbus_unit`:
-     * Checks if `"modbus"` is present in `hass.data`.
-     * If present, leases the shared unit via `async_get_unit` and automatically clears the Repairs advisory.
-     * If absent, cleanly falls back to standalone `modbus-connection` and registers a native Home Assistant Repairs advisory (`modbus_standalone_advisory`).
-  3. Automatic Promotion:
-     * When a user adds the recommended `modbus:` snippet to `configuration.yaml` and restarts Home Assistant, the integration promotes to the shared Core Modbus unit automatically.
-     * All 71 entities, unique IDs, and historical statistics remain continuous with zero disruption.
+### Phase 2: Core Modbus Connection Sharing (Achieved & Live)
+* **Objective**: Enable seamless Core Modbus connection leasing via `homeassistant.components.modbus.async_get_unit` without requiring manual YAML configuration.
+* **Status**: Complete & Verified Live in Core 2026.9.3.
+* **Key Findings & Architecture**:
+  1. In Home Assistant Core 2026.9+, `async_get_unit` creates and pools shared connections on demand under `hass.data[DATA_MODBUS_CONNECTIONS]` directly from config entry parameters (`192.168.86.162:502`).
+  2. Legacy YAML hubs (`get_hub`) are formally deprecated in Core 2026.10 with removal scheduled for Core 2027.10. Manual `modbus:` YAML entries are not required and should be avoided.
+  3. Declared `"after_dependencies": ["modbus"]` in `manifest.json`.
+  4. Integration dynamically leases the unit on startup, setting transceiver pacing (`0.25s`) and connect stabilization delays (`0.05s`).
+  5. Automatic fallback to standalone `modbus-connection` is retained for environments where Core Modbus is not present.
 
-### Phase 3: Dynamic Register Planning & Diagnostics
-* **Objective**: Enhance auto-tuning and diagnostics over lossy wireless bridges.
+### Phase 3: Dynamic Diagnostics & Adaptive Pacing
+* **Objective**: Add diagnostic visibility and bridge tolerance for lossy Wi-Fi/Ethernet transceivers.
+* **Status**: Ready for Implementation.
 * **Action Items**:
-  1. Implement dynamic message spacing: automatically back off from 250ms to 400ms if consecutive timeouts occur, and recover down to 200ms under stable low-jitter conditions.
-  2. Add Home Assistant diagnostics (`diagnostics.py`) exposing Modbus transaction counters, CRC retry rates, and coordinator debounce metrics to the UI.
-  3. Add register boundary discovery to detect custom firmware variations (e.g. new BMS registers on KH firmware 1.70+).
+  1. Add Home Assistant Diagnostics platform (`diagnostics.py`):
+     * Expose transport status (Leased via Core Modbus vs. Standalone fallback).
+     * Expose coordinator telemetry: poll durations, consecutive timeout counters, and recovery timestamps.
+     * Expose device register boundaries, inverter model profile, and detected firmware versions.
+  2. Implement Adaptive Bus Pacing:
+     * Base pacing at 250ms (optimal for FoxESS AUX UART).
+     * Back off to 350-400ms on first timeout to allow saturated RS-485 transceiver buffers to decay, returning to 250ms upon successful read.
 
 ### Phase 4: PyPI Release & Upstream Repository Alignment
 * **Objective**: Formalize the public release pipeline.
