@@ -229,9 +229,6 @@ def async_get_modbus_unit(
 ) -> ResilientModbusUnit:
     """Obtain a ModbusUnit from Core Modbus connection sharing, falling back to standalone."""
     try:
-        if not getattr(hass, "data", None) or "modbus" not in hass.data:
-            raise KeyError("Core modbus is not loaded in hass.data")
-
         from homeassistant.components.modbus import async_get_unit
 
         params = ModbusTcpParams(host=host, port=port)
