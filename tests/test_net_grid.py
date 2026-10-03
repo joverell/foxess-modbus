@@ -77,3 +77,31 @@ def test_kh10_inverter_state_and_versions_sensor():
     assert master_desc.value_fn(dev) == "1.69"
     assert slave_desc.value_fn(dev) == "1.03"
     assert manager_desc.value_fn(dev) == "1.64"
+
+
+def test_battery_throughput_sensor():
+    """Verify native battery throughput sensor calculation and handling of None."""
+    from custom_components.foxess_modern.sensor import HARDWARE_ENERGY_DESCRIPTIONS
+
+    desc = next(d for d in HARDWARE_ENERGY_DESCRIPTIONS if d.key == "battery_throughput")
+    assert desc.device_class == "energy"
+    assert desc.state_class == "total_increasing"
+    assert desc.native_unit_of_measurement == "kWh"
+
+    # With property available
+    dev = MagicMock()
+    dev.energy.battery_throughput = 8518.9
+    assert desc.value_fn(dev) == 8518.9
+
+    # Fallback calculation if property returns None or absent
+    dev_fallback = MagicMock()
+    dev_fallback.energy.battery_throughput = None
+    dev_fallback.energy.battery_charge_energy_total = 4200.0
+    dev_fallback.energy.battery_discharge_energy_total = 4318.9
+    assert desc.value_fn(dev_fallback) == 8518.9
+
+    # Missing energy component
+    dev_none = MagicMock()
+    dev_none.energy = None
+    assert desc.value_fn(dev_none) is None
+

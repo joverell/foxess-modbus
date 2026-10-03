@@ -61,6 +61,14 @@ def kh10_unit():
         36002: 0x0103, # Slave version: 1.03
         36003: 0x0164, # Manager version: 1.64
 
+        # Energy registers
+        32003: 0,     # Battery charge total high word
+        32004: 42000, # Battery charge total low word -> 4200.0 kWh
+        32005: 150,   # Battery charge today -> 15.0 kWh
+        32006: 0,     # Battery discharge total high word
+        32007: 43189, # Battery discharge total low word -> 4318.9 kWh
+        32008: 120,   # Battery discharge today -> 12.0 kWh
+
         # Control registers
         41000: 0,     # Work mode: Self Use (0)
         41009: 10,    # Min SOC: 10%
@@ -121,6 +129,11 @@ async def test_kh10_readings(kh10_unit):
     assert inverter.inverter.inverter_temp == pytest.approx(42.5)
     assert inverter.inverter.ambient_temp == pytest.approx(23.0)
     assert inverter.inverter.state == InverterState.ON_GRID
+
+    # Energy checks
+    assert inverter.energy.battery_charge_energy_total == pytest.approx(4200.0)
+    assert inverter.energy.battery_discharge_energy_total == pytest.approx(4318.9)
+    assert inverter.energy.battery_throughput == pytest.approx(8518.9)
 
 
 @pytest.mark.asyncio

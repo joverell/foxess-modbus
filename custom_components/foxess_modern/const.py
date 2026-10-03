@@ -60,6 +60,7 @@ def get_migratable_keys_for_model(
             ("grid_export_energy_total", "Grid Export Energy Total", "sensor"),
             ("battery_charge_energy_total", "Battery Charge Energy Total", "sensor"),
             ("battery_discharge_energy_total", "Battery Discharge Energy Total", "sensor"),
+            ("battery_throughput", "Battery Throughput", "sensor"),
             ("work_mode", "Work Mode", "select"),
             ("min_soc", "Min SoC", "number"),
         ]

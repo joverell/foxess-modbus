@@ -77,6 +77,7 @@ LEGACY_KEY_ALIASES: dict[str, list[str]] = {
         "discharge_energy",
     ],
     "battery_discharge_energy_today": ["battery_discharge_today"],
+    "battery_throughput": ["battery_throughput"],
     "house_load_energy_total": ["load_power_total", "load_energy_total"],
     "load_energy_total": ["load_power_total", "load_energy_total"],
     "house_load_energy_today": ["load_energy_today"],
@@ -166,11 +167,12 @@ def adopt_legacy_entity_id(
 
     # If the target entity ID is held by legacy foxess_modbus in active entities, release it
     if old_entry := entity_reg.async_get(target_entity_id):
-        if old_entry.platform == LEGACY_DOMAIN:
+        if old_entry.platform in (LEGACY_DOMAIN, "template"):
             _LOGGER.info(
-                "Releasing legacy entity %s (%s) from foxess_modbus",
+                "Releasing legacy entity %s (%s) from %s",
                 target_entity_id,
                 key,
+                old_entry.platform,
             )
             entity_reg.async_remove(target_entity_id)
 

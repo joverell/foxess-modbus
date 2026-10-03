@@ -49,3 +49,15 @@ class FoxessKH10Energy(FoxessComponent):
     # House load energy (kWh)
     load_energy_total = uint32(32021, scale=0.1, unit="kWh")
     load_energy_today = gauge(32023, 0.1, signed=False, unit="kWh")
+
+    @property
+    def battery_throughput(self) -> float | None:
+        """Total battery throughput (charge + discharge) in kWh."""
+        if (
+            self.battery_charge_energy_total is not None
+            and self.battery_discharge_energy_total is not None
+        ):
+            return round(
+                self.battery_charge_energy_total + self.battery_discharge_energy_total, 3
+            )
+        return None

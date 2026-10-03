@@ -709,6 +709,28 @@ HARDWARE_ENERGY_DESCRIPTIONS: tuple[FoxessSensorDescription, ...] = (
         value_fn=lambda dev: getattr(getattr(dev, "energy", None), "battery_discharge_energy_today", None),
     ),
     FoxessSensorDescription(
+        key="battery_throughput",
+        name="Battery Throughput",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        value_fn=lambda dev: (
+            getattr(getattr(dev, "energy", None), "battery_throughput", None)
+            if getattr(getattr(dev, "energy", None), "battery_throughput", None) is not None
+            else (
+                round(
+                    getattr(getattr(dev, "energy", None), "battery_charge_energy_total", 0.0)
+                    + getattr(getattr(dev, "energy", None), "battery_discharge_energy_total", 0.0),
+                    3,
+                )
+                if getattr(dev, "energy", None) is not None
+                and getattr(dev.energy, "battery_charge_energy_total", None) is not None
+                and getattr(dev.energy, "battery_discharge_energy_total", None) is not None
+                else None
+            )
+        ),
+    ),
+    FoxessSensorDescription(
         key="grid_export_energy_total",
         name="Grid Export Energy Total",
         device_class=SensorDeviceClass.ENERGY,
