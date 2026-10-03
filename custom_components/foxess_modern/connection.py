@@ -119,8 +119,8 @@ class ResilientModbusUnit:
         return await self._unit.read_input_registers(address, count)
 
     async def write_register(self, address: int, value: int) -> None:
-        """Write single holding register (Function code 6)."""
-        await self._unit.write_register(address, value)
+        """Write single holding register (routed via Function code 16 for FoxESS firmware compatibility)."""
+        await self._unit.write_registers(address, [value])
 
     async def write_registers(self, address: int, values: list[int]) -> None:
         """Write multiple holding registers (Function code 16)."""

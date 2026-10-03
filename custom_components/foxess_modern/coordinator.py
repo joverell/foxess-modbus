@@ -56,6 +56,11 @@ class FoxessDataUpdateCoordinator(DataUpdateCoordinator[UpdateReport]):
         return self._timeouts
 
     @property
+    def bus_lock(self) -> asyncio.Lock | None:
+        """Return the bus lock if present."""
+        return self._bus_lock
+
+    @property
     def is_available(self) -> bool:
         """Return True if coordinator successfully updated data or within transient tolerance."""
         if self._timeouts < 2 and self.data is not None:

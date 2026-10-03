@@ -69,7 +69,9 @@ class MockRestoreSensor(MockSensorEntity):
 
 
 class MockSelectEntity:
-    pass
+    @property
+    def options(self) -> list[str]:
+        return getattr(self, "_attr_options", [])
 
 
 class MockNumberEntity:

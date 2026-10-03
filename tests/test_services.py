@@ -152,3 +152,64 @@ def test_dynamic_power_scaling():
     dev_h1 = MagicMock(spec=["series"])
     dev_h1.series = "H1"
     assert get_max_inverter_power(dev_h1) == 6000.0
+
+
+@pytest.mark.asyncio
+async def test_foxess_work_mode_select(mock_kh10):
+    """Test FoxessWorkModeSelect options, state reading, and option selection."""
+    from custom_components.foxess_modern.select import (
+        FoxessWorkModeSelect,
+        WORK_MODE_SELF_USE,
+        WORK_MODE_FEED_IN_FIRST,
+        WORK_MODE_BACK_UP,
+        WORK_MODE_FORCE_CHARGE,
+        WORK_MODE_FORCE_DISCHARGE,
+    )
+
+    coordinator = MagicMock()
+    coordinator.device_info = {}
+    coordinator.bus_lock = None
+    coordinator.async_request_refresh = AsyncMock()
+
+    select = FoxessWorkModeSelect(coordinator, mock_kh10, "KH10ABC1234567")
+    assert select.options == [
+        WORK_MODE_SELF_USE,
+        WORK_MODE_FEED_IN_FIRST,
+        WORK_MODE_BACK_UP,
+        WORK_MODE_FORCE_CHARGE,
+        WORK_MODE_FORCE_DISCHARGE,
+    ]
+
+    # Test current_option when hardware mode is Self Use and remote is inactive
+    mock_kh10.control.remote_enable = 0
+    mock_kh10.control.remote_active_power = 0
+    mock_kh10.control.raw_work_mode = 0
+    assert select.current_option == WORK_MODE_SELF_USE
+
+    # Test current_option when remote is active charging
+    mock_kh10.control.remote_enable = 1
+    mock_kh10.control.remote_active_power = -5000
+    assert select.current_option == WORK_MODE_FORCE_CHARGE
+
+    # Test current_option when remote is active discharging
+    mock_kh10.control.remote_enable = 1
+    mock_kh10.control.remote_active_power = 4000
+    assert select.current_option == WORK_MODE_FORCE_DISCHARGE
+
+    # Test selecting Force Charge
+    mock_kh10.async_set_force_charge = AsyncMock()
+    await select.async_select_option(WORK_MODE_FORCE_CHARGE)
+    mock_kh10.async_set_force_charge.assert_awaited_once_with(power_w=5000, max_soc=100)
+    coordinator.async_request_refresh.assert_awaited()
+
+    # Test selecting Force Discharge
+    mock_kh10.async_set_force_discharge = AsyncMock()
+    await select.async_select_option(WORK_MODE_FORCE_DISCHARGE)
+    mock_kh10.async_set_force_discharge.assert_awaited_once_with(power_w=5000, min_soc=10)
+
+    # Test selecting Self Use clears overrides and sets mode
+    mock_kh10.async_clear_overrides = AsyncMock()
+    mock_kh10.async_set_work_mode = AsyncMock()
+    await select.async_select_option(WORK_MODE_SELF_USE)
+    mock_kh10.async_clear_overrides.assert_awaited_once()
+    mock_kh10.async_set_work_mode.assert_awaited_once_with(WorkMode.SELF_USE)
