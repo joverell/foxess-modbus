@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
@@ -130,11 +131,21 @@ class FoxessKH10Inverter(FoxessDevice):
     ) -> None:
         """Command the inverter to force charge the battery at a target power (W)."""
         power_w = abs(power_w)
-        await self.control.write("max_soc", max_soc)
-        await self.control.write("remote_timeout", timeout_sec)
-        # Negative active power commands grid import into the battery
-        await self.control.write("remote_active_power", -power_w)
-        await self.control.write("remote_enable", 1)
+        if max_soc is not None and self.control.max_soc != max_soc:
+            await self.control.write("max_soc", max_soc)
+            await asyncio.sleep(0.3)
+        if self.control.raw_work_mode != int(WorkMode.BACK_UP):
+            await self.control.write("raw_work_mode", int(WorkMode.BACK_UP))
+            await asyncio.sleep(0.3)
+        # 44000..44002 are written via write_register (FC6)
+        await self.modbus_unit.write_register(44001, timeout_sec)
+        await asyncio.sleep(0.15)
+        await self.modbus_unit.write_register(44000, 1)
+        await asyncio.sleep(0.15)
+        await self.modbus_unit.write_register(44002, (-power_w) & 0xFFFF)
+        self.control.remote_enable = 1
+        self.control.remote_timeout = timeout_sec
+        self.control.remote_active_power = -power_w
 
     async def async_set_force_discharge(
         self,
@@ -144,13 +155,27 @@ class FoxessKH10Inverter(FoxessDevice):
     ) -> None:
         """Command the inverter to force export from the battery at a target power (W)."""
         power_w = abs(power_w)
-        await self.control.write("min_soc", min_soc)
-        await self.control.write("remote_timeout", timeout_sec)
-        # Positive active power commands battery discharge to grid
-        await self.control.write("remote_active_power", power_w)
-        await self.control.write("remote_enable", 1)
+        if min_soc is not None and self.control.min_soc != min_soc:
+            await self.control.write("min_soc", min_soc)
+            await asyncio.sleep(0.3)
+        if self.control.raw_work_mode != int(WorkMode.FEED_IN_FIRST):
+            await self.control.write("raw_work_mode", int(WorkMode.FEED_IN_FIRST))
+            await asyncio.sleep(0.3)
+        # 44000..44002 are written via write_register (FC6)
+        await self.modbus_unit.write_register(44001, timeout_sec)
+        await asyncio.sleep(0.15)
+        await self.modbus_unit.write_register(44000, 1)
+        await asyncio.sleep(0.15)
+        await self.modbus_unit.write_register(44002, power_w & 0xFFFF)
+        self.control.remote_enable = 1
+        self.control.remote_timeout = timeout_sec
+        self.control.remote_active_power = power_w
 
     async def async_clear_overrides(self) -> None:
         """Cancel remote active power override and revert to standard Self-Use operation."""
-        await self.control.write("remote_enable", 0)
+        await self.modbus_unit.write_register(44000, 0)
+        await asyncio.sleep(0.15)
+        self.control.remote_enable = 0
+        self.control.remote_timeout = 0
+        self.control.remote_active_power = 0
         await self.control.write("raw_work_mode", int(WorkMode.SELF_USE))

@@ -16,6 +16,7 @@ class FoxessKH10FirmwareVersion(FoxessComponent):
     Polled on the slower settings cycle (60s) to keep the 15s telemetry loop lean.
     """
 
+    register_space = "holding"
     version_is_hex: bool = True
 
     master_version = integer(36001, signed=False)

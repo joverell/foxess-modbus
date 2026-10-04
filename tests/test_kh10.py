@@ -71,9 +71,12 @@ def kh10_unit():
 
         # Control registers
         41000: 0,     # Work mode: Self Use (0)
+        41001: 0,
+        41002: 0,
+        41007: 500,   # Max charge current: 50.0 A
+        41008: 500,   # Max discharge current: 50.0 A
         41009: 10,    # Min SOC: 10%
         41010: 100,   # Max SOC: 100%
-        41011: 15,    # Min SOC on grid: 15%
         44000: 0,     # Remote enable: Off
         44001: 0,     # Remote timeout
         44002: 0,     # Remote power
