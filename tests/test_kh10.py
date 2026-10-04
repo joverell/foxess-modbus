@@ -77,6 +77,11 @@ def kh10_unit():
         41008: 500,   # Max discharge current: 50.0 A
         41009: 10,    # Min SOC: 10%
         41010: 100,   # Max SOC: 100%
+        41011: 15,    # Min SOC on grid: 15%
+        46501: 0,     # Import power limit high word
+        46502: 14500, # Import power limit low word
+        46616: 0,     # Export power limit high word
+        46617: 10000, # Export power limit low word
         44000: 0,     # Remote enable: Off
         44001: 0,     # Remote timeout
         44002: 0,     # Remote power
@@ -149,6 +154,9 @@ async def test_kh10_settings(kh10_unit):
     assert inverter.control.work_mode == WorkMode.SELF_USE
     assert inverter.control.min_soc == 10
     assert inverter.control.max_soc == 100
+    assert inverter.control.min_soc_on_grid == 15
+    assert inverter.control.import_power_limit == 14500
+    assert inverter.control.export_power_limit == 10000
     assert "versions" in report.updated
     assert inverter.inverter.master_version == 0x0169
     assert inverter.inverter.slave_version == 0x0103
