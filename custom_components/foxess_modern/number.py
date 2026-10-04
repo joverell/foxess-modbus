@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode, RestoreNumber
@@ -31,6 +32,7 @@ async def async_setup_entry(
     )
     entity_reg = er.async_get(hass)
 
+    bus_lock = getattr(entry.runtime_data, "bus_lock", None)
     entities: list[NumberEntity] = []
 
     def _get_target_id(key: str) -> str:
@@ -46,7 +48,11 @@ async def async_setup_entry(
     if hasattr(device.control, "min_soc"):
         entities.append(
             FoxessMinSocNumber(
-                coordinator, device, serial, target_entity_id=_get_target_id("min_soc")
+                coordinator,
+                device,
+                serial,
+                target_entity_id=_get_target_id("min_soc"),
+                bus_lock=bus_lock,
             )
         )
 
@@ -54,7 +60,11 @@ async def async_setup_entry(
     if hasattr(device.control, "max_soc"):
         entities.append(
             FoxessMaxSocNumber(
-                coordinator, device, serial, target_entity_id=_get_target_id("max_soc")
+                coordinator,
+                device,
+                serial,
+                target_entity_id=_get_target_id("max_soc"),
+                bus_lock=bus_lock,
             )
         )
 
@@ -66,6 +76,7 @@ async def async_setup_entry(
                 device,
                 serial,
                 target_entity_id=_get_target_id("min_soc_on_grid"),
+                bus_lock=bus_lock,
             )
         )
 
@@ -77,6 +88,7 @@ async def async_setup_entry(
                 device,
                 serial,
                 target_entity_id=_get_target_id("max_charge_current"),
+                bus_lock=bus_lock,
             )
         )
 
@@ -88,6 +100,7 @@ async def async_setup_entry(
                 device,
                 serial,
                 target_entity_id=_get_target_id("max_discharge_current"),
+                bus_lock=bus_lock,
             )
         )
 
@@ -99,6 +112,7 @@ async def async_setup_entry(
                 device,
                 serial,
                 target_entity_id=_get_target_id("export_power_limit"),
+                bus_lock=bus_lock,
             )
         )
 
@@ -110,6 +124,7 @@ async def async_setup_entry(
                 device,
                 serial,
                 target_entity_id=_get_target_id("import_power_limit"),
+                bus_lock=bus_lock,
             )
         )
 
@@ -120,6 +135,7 @@ async def async_setup_entry(
             device,
             serial,
             target_entity_id=_get_target_id("force_charge_power"),
+            bus_lock=bus_lock,
         )
     )
     entities.append(
@@ -128,6 +144,7 @@ async def async_setup_entry(
             device,
             serial,
             target_entity_id=_get_target_id("force_discharge_power"),
+            bus_lock=bus_lock,
         )
     )
 
@@ -139,10 +156,45 @@ class FoxessBaseNumberEntity(CoordinatorEntity[FoxessDataUpdateCoordinator], Num
 
     _attr_has_entity_name = False
 
+    def __init__(
+        self,
+        coordinator: FoxessDataUpdateCoordinator,
+        device: Any,
+        serial: str,
+        target_entity_id: str | None = None,
+        suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
+    ) -> None:
+        """Initialize the number entity."""
+        super().__init__(coordinator)
+        self._device = device
+        self._bus_lock = bus_lock or getattr(coordinator, "bus_lock", None)
+        raw_id = target_entity_id or suggested_object_id
+        if raw_id:
+            if not raw_id.startswith("number."):
+                raw_id = f"number.{raw_id}"
+            self.entity_id = raw_id
+            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
+        elif suggested_object_id:
+            self._attr_suggested_object_id = suggested_object_id
+
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
         return self.coordinator.is_available
+
+    async def _async_write(self, coro: Any) -> None:
+        """Execute write coroutine serialized under bus_lock."""
+        bus_lock = self._bus_lock or getattr(
+            self.coordinator,
+            "bus_lock",
+            getattr(self.coordinator, "_bus_lock", None),
+        )
+        if bus_lock is not None:
+            async with bus_lock:
+                await coro
+        else:
+            await coro
 
 
 class FoxessMinSocNumber(FoxessBaseNumberEntity):
@@ -162,21 +214,13 @@ class FoxessMinSocNumber(FoxessBaseNumberEntity):
         serial: str,
         target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator)
-        self._device = device
+        super().__init__(coordinator, device, serial, target_entity_id, suggested_object_id, bus_lock)
         self._attr_unique_id = f"{serial}_min_soc"
         self._attr_name = "Min SoC"
         self._attr_device_info = coordinator.device_info
-        raw_id = target_entity_id or suggested_object_id
-        if raw_id:
-            if not raw_id.startswith("number."):
-                raw_id = f"number.{raw_id}"
-            self.entity_id = raw_id
-            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
-        elif suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float | None:
@@ -186,7 +230,7 @@ class FoxessMinSocNumber(FoxessBaseNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the min SOC."""
-        await self._device.async_set_min_soc(int(value))
+        await self._async_write(self._device.async_set_min_soc(int(value)))
         await self.coordinator.async_request_refresh()
 
 
@@ -207,21 +251,13 @@ class FoxessMaxSocNumber(FoxessBaseNumberEntity):
         serial: str,
         target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator)
-        self._device = device
+        super().__init__(coordinator, device, serial, target_entity_id, suggested_object_id, bus_lock)
         self._attr_unique_id = f"{serial}_max_soc"
         self._attr_name = "Max SoC"
         self._attr_device_info = coordinator.device_info
-        raw_id = target_entity_id or suggested_object_id
-        if raw_id:
-            if not raw_id.startswith("number."):
-                raw_id = f"number.{raw_id}"
-            self.entity_id = raw_id
-            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
-        elif suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float | None:
@@ -231,7 +267,7 @@ class FoxessMaxSocNumber(FoxessBaseNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the max SOC."""
-        await self._device.async_set_max_soc(int(value))
+        await self._async_write(self._device.async_set_max_soc(int(value)))
         await self.coordinator.async_request_refresh()
 
 
@@ -252,21 +288,13 @@ class FoxessMinSocOnGridNumber(FoxessBaseNumberEntity):
         serial: str,
         target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator)
-        self._device = device
+        super().__init__(coordinator, device, serial, target_entity_id, suggested_object_id, bus_lock)
         self._attr_unique_id = f"{serial}_min_soc_on_grid"
         self._attr_name = "Min SoC (On Grid)"
         self._attr_device_info = coordinator.device_info
-        raw_id = target_entity_id or suggested_object_id
-        if raw_id:
-            if not raw_id.startswith("number."):
-                raw_id = f"number.{raw_id}"
-            self.entity_id = raw_id
-            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
-        elif suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float | None:
@@ -276,7 +304,7 @@ class FoxessMinSocOnGridNumber(FoxessBaseNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the min SOC on grid."""
-        await self._device.async_set_min_soc_on_grid(int(value))
+        await self._async_write(self._device.async_set_min_soc_on_grid(int(value)))
         await self.coordinator.async_request_refresh()
 
 
@@ -297,21 +325,13 @@ class FoxessMaxChargeCurrentNumber(FoxessBaseNumberEntity):
         serial: str,
         target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator)
-        self._device = device
+        super().__init__(coordinator, device, serial, target_entity_id, suggested_object_id, bus_lock)
         self._attr_unique_id = f"{serial}_max_charge_current"
         self._attr_name = "Max Charge Current"
         self._attr_device_info = coordinator.device_info
-        raw_id = target_entity_id or suggested_object_id
-        if raw_id:
-            if not raw_id.startswith("number."):
-                raw_id = f"number.{raw_id}"
-            self.entity_id = raw_id
-            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
-        elif suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float | None:
@@ -321,7 +341,7 @@ class FoxessMaxChargeCurrentNumber(FoxessBaseNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the max charge current."""
-        await self._device.async_set_max_charge_current(value)
+        await self._async_write(self._device.async_set_max_charge_current(value))
         await self.coordinator.async_request_refresh()
 
 
@@ -342,21 +362,13 @@ class FoxessMaxDischargeCurrentNumber(FoxessBaseNumberEntity):
         serial: str,
         target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator)
-        self._device = device
+        super().__init__(coordinator, device, serial, target_entity_id, suggested_object_id, bus_lock)
         self._attr_unique_id = f"{serial}_max_discharge_current"
         self._attr_name = "Max Discharge Current"
         self._attr_device_info = coordinator.device_info
-        raw_id = target_entity_id or suggested_object_id
-        if raw_id:
-            if not raw_id.startswith("number."):
-                raw_id = f"number.{raw_id}"
-            self.entity_id = raw_id
-            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
-        elif suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float | None:
@@ -366,7 +378,7 @@ class FoxessMaxDischargeCurrentNumber(FoxessBaseNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the max discharge current."""
-        await self._device.async_set_max_discharge_current(value)
+        await self._async_write(self._device.async_set_max_discharge_current(value))
         await self.coordinator.async_request_refresh()
 
 
@@ -387,21 +399,13 @@ class FoxessExportPowerLimitNumber(FoxessBaseNumberEntity):
         serial: str,
         target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator)
-        self._device = device
+        super().__init__(coordinator, device, serial, target_entity_id, suggested_object_id, bus_lock)
         self._attr_unique_id = f"{serial}_export_power_limit"
         self._attr_name = "Export Power Limit"
         self._attr_device_info = coordinator.device_info
-        raw_id = target_entity_id or suggested_object_id
-        if raw_id:
-            if not raw_id.startswith("number."):
-                raw_id = f"number.{raw_id}"
-            self.entity_id = raw_id
-            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
-        elif suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float | None:
@@ -411,7 +415,7 @@ class FoxessExportPowerLimitNumber(FoxessBaseNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the export power limit."""
-        await self._device.async_set_export_power_limit(int(value))
+        await self._async_write(self._device.async_set_export_power_limit(int(value)))
         await self.coordinator.async_request_refresh()
 
 
@@ -432,21 +436,13 @@ class FoxessImportPowerLimitNumber(FoxessBaseNumberEntity):
         serial: str,
         target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator)
-        self._device = device
+        super().__init__(coordinator, device, serial, target_entity_id, suggested_object_id, bus_lock)
         self._attr_unique_id = f"{serial}_import_power_limit"
         self._attr_name = "Import Power Limit"
         self._attr_device_info = coordinator.device_info
-        raw_id = target_entity_id or suggested_object_id
-        if raw_id:
-            if not raw_id.startswith("number."):
-                raw_id = f"number.{raw_id}"
-            self.entity_id = raw_id
-            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
-        elif suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
 
     @property
     def native_value(self) -> float | None:
@@ -456,7 +452,7 @@ class FoxessImportPowerLimitNumber(FoxessBaseNumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the import power limit."""
-        await self._device.async_set_import_power_limit(int(value))
+        await self._async_write(self._device.async_set_import_power_limit(int(value)))
         await self.coordinator.async_request_refresh()
 
 
@@ -493,23 +489,15 @@ class FoxessForceChargePowerNumber(FoxessBaseNumberEntity, RestoreNumber):
         serial: str,
         target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator)
-        self._device = device
+        super().__init__(coordinator, device, serial, target_entity_id, suggested_object_id, bus_lock)
         self._attr_unique_id = f"{serial}_force_charge_power"
         self._attr_name = "Force Charge Power"
         self._attr_device_info = coordinator.device_info
         self._attr_native_max_value = get_max_inverter_power(device)
         self._target_power: float = 10500.0
-        raw_id = target_entity_id or suggested_object_id
-        if raw_id:
-            if not raw_id.startswith("number."):
-                raw_id = f"number.{raw_id}"
-            self.entity_id = raw_id
-            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
-        elif suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
 
     async def async_added_to_hass(self) -> None:
         """Handle entity restore."""
@@ -545,23 +533,15 @@ class FoxessForceDischargePowerNumber(FoxessBaseNumberEntity, RestoreNumber):
         serial: str,
         target_entity_id: str | None = None,
         suggested_object_id: str | None = None,
+        bus_lock: asyncio.Lock | None = None,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator)
-        self._device = device
+        super().__init__(coordinator, device, serial, target_entity_id, suggested_object_id, bus_lock)
         self._attr_unique_id = f"{serial}_force_discharge_power"
         self._attr_name = "Force Discharge Power"
         self._attr_device_info = coordinator.device_info
         self._attr_native_max_value = get_max_inverter_power(device)
         self._target_power: float = 10500.0
-        raw_id = target_entity_id or suggested_object_id
-        if raw_id:
-            if not raw_id.startswith("number."):
-                raw_id = f"number.{raw_id}"
-            self.entity_id = raw_id
-            self._attr_suggested_object_id = raw_id.split(".", 1)[-1]
-        elif suggested_object_id:
-            self._attr_suggested_object_id = suggested_object_id
 
     async def async_added_to_hass(self) -> None:
         """Handle entity restore."""

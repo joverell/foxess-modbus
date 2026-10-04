@@ -157,7 +157,10 @@ class FoxessWorkModeSelect(CoordinatorEntity[FoxessDataUpdateCoordinator], Selec
                         power = int(float(p_state.state))
                     except (ValueError, TypeError):
                         pass
-                if s_state := self.hass.states.get("number.min_soc"):
+                if s_state := (
+                    self.hass.states.get("input_number.forced_discharge_min_soc")
+                    or self.hass.states.get("number.min_soc")
+                ):
                     try:
                         min_soc = int(float(s_state.state))
                     except (ValueError, TypeError):

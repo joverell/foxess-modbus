@@ -23,7 +23,12 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+import socket
+import struct
+import time
+
 DEFAULT_TIMEOUT = 5.0
+DEFAULT_WRITE_TIMEOUT = 5.0
 DEFAULT_MESSAGE_SPACING = 0.30  # 300ms RS-485 bus pacing for FoxESS AUX UART transceiver line decay
 DEFAULT_CONNECT_DELAY = 0.05   # 50ms transceiver line stabilization
 
@@ -49,7 +54,7 @@ class ResilientModbusUnit:
     """Manages connection and unit operations via modbus_connection.
 
     Supports both Home Assistant Core shared unit leasing and standalone
-    ModbusConnection management.
+    ModbusConnection management with robust frame synchronization.
     """
 
     def __init__(
@@ -66,6 +71,10 @@ class ResilientModbusUnit:
         self.unit_id = unit_id
         self.timeout = timeout
         self.bus_lock = asyncio.Lock()
+        self._sock: socket.socket | None = None
+        self._tid: int = 0
+        self._message_spacing: float = DEFAULT_MESSAGE_SPACING
+        self._last_time: float = 0.0
 
         if modbus_unit is not None:
             self._connection: ModbusConnection | None = getattr(modbus_unit, "_client", None)
@@ -108,43 +117,155 @@ class ResilientModbusUnit:
     @property
     def connected(self) -> bool:
         """Return True if connection is established."""
-        return bool(getattr(self._unit, "connected", False))
+        if self._is_leased:
+            return bool(getattr(self._unit, "connected", False))
+        return True
+
+    def _get_socket(self) -> socket.socket:
+        if self._sock is None:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(self.timeout)
+            s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            s.connect((self.host, self.port))
+            time.sleep(0.05)
+            self._sock = s
+        return self._sock
+
+    def _close_socket(self) -> None:
+        if self._sock:
+            try:
+                self._sock.close()
+            except Exception:
+                pass
+            self._sock = None
+
+    def _purge(self, s: socket.socket) -> None:
+        s.setblocking(False)
+        try:
+            while True:
+                c = s.recv(4096)
+                if not c:
+                    break
+        except (BlockingIOError, OSError):
+            pass
+        s.setblocking(True)
+
+    def _sync_read(self, fc: int, address: int, count: int) -> list[int]:
+        elapsed = time.time() - self._last_time
+        if elapsed < self._message_spacing:
+            time.sleep(self._message_spacing - elapsed)
+
+        for attempt in range(4):
+            try:
+                s = self._get_socket()
+                self._purge(s)
+                self._tid = (self._tid + 1) & 0xFFFF
+                req = struct.pack(">HHHBBHH", self._tid, 0, 6, self.unit_id, fc, address, count)
+                s.sendall(req)
+                self._last_time = time.time()
+
+                s.settimeout(self.timeout)
+                buf = b""
+                start = time.time()
+                expected_header = bytes([self.unit_id, fc, count * 2])
+                err_header = bytes([self.unit_id, fc | 0x80])
+
+                while time.time() - start < self.timeout:
+                    c = s.recv(1024)
+                    if not c:
+                        raise ConnectionResetError("Connection closed by peer")
+                    buf += c
+
+                    err_idx = buf.find(err_header)
+                    if err_idx != -1 and len(buf) >= err_idx + 3:
+                        raise RuntimeError(f"Modbus exception: {buf[err_idx + 2]:#04x}")
+
+                    idx = buf.find(expected_header)
+                    if idx != -1:
+                        data_start = idx + 3
+                        data_len = count * 2
+                        if len(buf) >= data_start + data_len:
+                            data_bytes = buf[data_start : data_start + data_len]
+                            return list(struct.unpack(f">{count}H", data_bytes))
+
+                self._close_socket()
+                time.sleep(0.1)
+            except (OSError, ConnectionResetError, BrokenPipeError):
+                self._close_socket()
+                time.sleep(0.1)
+
+        raise TimeoutError(f"Failed to read fc={fc} addr={address} count={count}")
+
+    def _sync_write(self, address: int, value: int) -> None:
+        elapsed = time.time() - self._last_time
+        if elapsed < self._message_spacing:
+            time.sleep(self._message_spacing - elapsed)
+
+        for attempt in range(3):
+            try:
+                s = self._get_socket()
+                self._purge(s)
+                self._tid = (self._tid + 1) & 0xFFFF
+                req = struct.pack(">HHHBBHH", self._tid, 0, 6, self.unit_id, 6, address, value)
+                s.sendall(req)
+                self._last_time = time.time()
+
+                s.settimeout(self.timeout)
+                buf = b""
+                start = time.time()
+                expected_echo = bytes([self.unit_id, 6, address >> 8, address & 0xFF, value >> 8, value & 0xFF])
+                err_header = bytes([self.unit_id, 6 | 0x80])
+
+                while time.time() - start < self.timeout:
+                    c = s.recv(1024)
+                    if not c:
+                        raise ConnectionResetError("Connection closed by peer")
+                    buf += c
+
+                    err_idx = buf.find(err_header)
+                    if err_idx != -1 and len(buf) >= err_idx + 3:
+                        raise RuntimeError(f"Modbus exception: {buf[err_idx + 2]:#04x}")
+
+                    if expected_echo in buf:
+                        return
+                if len(buf) > 0:
+                    return
+            except (OSError, ConnectionResetError, BrokenPipeError):
+                self._close_socket()
+                time.sleep(0.1)
+
+        raise TimeoutError(f"Failed to write register {address}={value}")
 
     async def read_holding_registers(self, address: int, count: int) -> list[int]:
         """Read holding registers (Function code 3)."""
-        return await self._unit.read_holding_registers(address, count)
+        if self._is_leased:
+            return await self._unit.read_holding_registers(address, count)
+        async with self.bus_lock:
+            return await asyncio.to_thread(self._sync_read, 3, address, count)
 
     async def read_input_registers(self, address: int, count: int) -> list[int]:
         """Read input registers (Function code 4)."""
-        return await self._unit.read_input_registers(address, count)
+        if self._is_leased:
+            return await self._unit.read_input_registers(address, count)
+        async with self.bus_lock:
+            return await asyncio.to_thread(self._sync_read, 4, address, count)
 
     async def write_register(self, address: int, value: int) -> None:
         """Write single holding register (Function code 6)."""
-        try:
+        if self._is_leased:
             await self._unit.write_register(address, value)
-        except Exception as err:
-            if "Expected response to match request" in str(err):
-                _LOGGER.debug(
-                    "Inverter returned non-identical FC6 echo for register %s (tolerated): %s",
-                    address,
-                    err,
-                )
-                return
-            raise
+            return
+        async with self.bus_lock:
+            await asyncio.to_thread(self._sync_write, address, value)
 
     async def write_registers(self, address: int, values: list[int]) -> None:
         """Write multiple holding registers (Function code 16)."""
-        try:
+        if self._is_leased:
             await self._unit.write_registers(address, values)
-        except Exception as err:
-            if "Expected response to match request" in str(err):
-                _LOGGER.debug(
-                    "Inverter returned non-identical FC16 echo for register %s (tolerated): %s",
-                    address,
-                    err,
-                )
-                return
-            raise
+            return
+        async with self.bus_lock:
+            for i, val in enumerate(values):
+                await asyncio.to_thread(self._sync_write, address + i, val)
 
     async def read_coils(self, address: int, count: int) -> list[bool]:
         """Read coils (Function code 1)."""
@@ -211,12 +332,20 @@ class ResilientModbusUnit:
     async def disconnect(self) -> None:
         """Recycle the connection when the serial bridge stops answering."""
         _LOGGER.info("Recycling Modbus connection to %s:%s", self.host, self.port)
-        await self._unit.disconnect()
+        if self._is_leased:
+            await self._unit.disconnect()
+        else:
+            await asyncio.to_thread(self._close_socket)
 
     async def close(self) -> None:
         """Permanently close the underlying connection if privately owned."""
-        if not self._is_leased and self._connection is not None:
-            await self._connection.close()
+        if not self._is_leased:
+            await asyncio.to_thread(self._close_socket)
+            if self._connection is not None:
+                try:
+                    await self._connection.close()
+                except Exception:
+                    pass
 
     def set_message_spacing(self, seconds: float) -> None:
         """Set minimum pacing interval between requests."""

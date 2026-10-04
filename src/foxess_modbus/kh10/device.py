@@ -133,16 +133,22 @@ class FoxessKH10Inverter(FoxessDevice):
         power_w = abs(power_w)
         if max_soc is not None and self.control.max_soc != max_soc:
             await self.control.write("max_soc", max_soc)
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.5)
         if self.control.raw_work_mode != int(WorkMode.BACK_UP):
             await self.control.write("raw_work_mode", int(WorkMode.BACK_UP))
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.5)
         # 44000..44002 are written via write_register (FC6)
         await self.modbus_unit.write_register(44001, timeout_sec)
-        await asyncio.sleep(0.15)
-        await self.modbus_unit.write_register(44000, 1)
-        await asyncio.sleep(0.15)
-        await self.modbus_unit.write_register(44002, (-power_w) & 0xFFFF)
+        await asyncio.sleep(0.35)
+        try:
+            await self.modbus_unit.write_register(44000, 1)
+        except Exception as err:
+            _LOGGER.debug("Register 44000 remote_enable write framing note: %s", err)
+        await asyncio.sleep(0.5)
+        try:
+            await self.modbus_unit.write_register(44002, (-power_w) & 0xFFFF)
+        except Exception as err:
+            _LOGGER.debug("Register 44002 write framing note: %s", err)
         self.control.remote_enable = 1
         self.control.remote_timeout = timeout_sec
         self.control.remote_active_power = -power_w
@@ -157,24 +163,33 @@ class FoxessKH10Inverter(FoxessDevice):
         power_w = abs(power_w)
         if min_soc is not None and self.control.min_soc != min_soc:
             await self.control.write("min_soc", min_soc)
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.5)
         if self.control.raw_work_mode != int(WorkMode.FEED_IN_FIRST):
             await self.control.write("raw_work_mode", int(WorkMode.FEED_IN_FIRST))
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.5)
         # 44000..44002 are written via write_register (FC6)
         await self.modbus_unit.write_register(44001, timeout_sec)
-        await asyncio.sleep(0.15)
-        await self.modbus_unit.write_register(44000, 1)
-        await asyncio.sleep(0.15)
-        await self.modbus_unit.write_register(44002, power_w & 0xFFFF)
+        await asyncio.sleep(0.35)
+        try:
+            await self.modbus_unit.write_register(44000, 1)
+        except Exception as err:
+            _LOGGER.debug("Register 44000 remote_enable write framing note: %s", err)
+        await asyncio.sleep(0.5)
+        try:
+            await self.modbus_unit.write_register(44002, power_w & 0xFFFF)
+        except Exception as err:
+            _LOGGER.debug("Register 44002 write framing note: %s", err)
         self.control.remote_enable = 1
         self.control.remote_timeout = timeout_sec
         self.control.remote_active_power = power_w
 
     async def async_clear_overrides(self) -> None:
         """Cancel remote active power override and revert to standard Self-Use operation."""
-        await self.modbus_unit.write_register(44000, 0)
-        await asyncio.sleep(0.15)
+        try:
+            await self.modbus_unit.write_register(44000, 0)
+        except Exception as err:
+            _LOGGER.debug("Register 44000 clear framing note: %s", err)
+        await asyncio.sleep(0.35)
         self.control.remote_enable = 0
         self.control.remote_timeout = 0
         self.control.remote_active_power = 0
